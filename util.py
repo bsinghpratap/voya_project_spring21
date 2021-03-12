@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import numpy as np
 import pickle
@@ -19,31 +20,36 @@ def unpickle(file, path='../Files/gensim/'):
     return obj
 
 
-def load_gensim_data(year, path='../Files/gensim'):
+def load_gensim_data(year, path='../Files/gensim/'):
     if type(year) in [tuple, list]:
         year_str = str(year[0]) + '-' + str(year[1])
     else:
-        year_str = str(year)
+        year_str = str(year) + '-' + str(year)
+        
+    objs = dict()
     
-    corpus = {
-        '1a': unpickle(f'{year_str}_item1a_corpus.pkl', path),
-        '7': unpickle(f'{year_str}_item7_corpus.pkl', path)
-    }
-
-    id2word = {
-        '1a': unpickle(f'{year_str}_item1a_id2word.pkl', path),
-        '7': unpickle(f'{year_str}_item7_id2word.pkl', path)
-    }
+    for filename in os.listdir(path+year_str+'/'):
+        if filename.endswith('.pkl'):   
+            _, sector, item, gtype = filename.split('_')
+            gtype = gtype.split('.')[0]
+            
+            if sector not in objs:
+                objs[sector] = {
+                    'item1a': dict(),
+                    'item7': dict()
+                }
+            
+            objs[sector][item][gtype] = unpickle(f'{year_str}_{sector}_{item}_{gtype}.pkl', path=path+year_str+'/')
     
-    return corpus, id2word
+    return objs
 
-def plot_topics(model, corpus, num_topics=10, topn=10):
-    top_topics = model.top_topics(corpus=corpus, topn=topn)
+def plot_topics(model, num_topics=10, topn=10):
+#     top_topics = model.top_topics(corpus=corpus, topn=topn)
     # fig, ax_list = plt.subplots(np.ceil(num_topics/2), np.ceil(num_topics/2))
     for t in range(num_topics):
-        topic = top_topics[t][0]
-        words = [pair[1] for pair in topic]
-        probs = [pair[0] for pair in topic]
+        topic = model.show_topic(t, topn=topn)
+        words = [pair[0] for pair in topic]
+        probs = [pair[1] for pair in topic]
         
         fig, ax = plt.subplots()
         plt.rcdefaults()
@@ -54,6 +60,6 @@ def plot_topics(model, corpus, num_topics=10, topn=10):
         ax.set_yticklabels(words)
         ax.invert_yaxis()
         ax.set_xlabel('Probability')
-        ax.set_title(f'Topic rank #{t+1}')
+        ax.set_title(f'Topic id: {t+1}')
         
         plt.show()
