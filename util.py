@@ -18,7 +18,7 @@ def unpickle(file, path='../Files/gensim/'):
 
 
 def load_gensim_data(year, path='../Files/gensim'):
-    if type(year) is list:
+    if type(year) in [tuple, list]:
         year_str = str(year[0]) + '-' + str(year[1])
     else:
         year_str = str(year)
