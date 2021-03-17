@@ -88,6 +88,8 @@ stopwords_total = set(list(STOPWORDS) + cachedWords)
 
 
 data.query('year_x in @SELECTED_YEARS', inplace=True)
+del X
+del y
 items = {
     'item1a': data['item1a_risk'],
     'item7': data['item7_mda']
@@ -199,7 +201,3 @@ for item in items:
 
 
 # In[ ]:
-
-
-
-

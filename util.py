@@ -1,5 +1,7 @@
 import pandas as pd
+import numpy as np
 import pickle
+import matplotlib.pyplot as plt
 
 # Loads data
 # returns: Tuple(all_data, X, y)
@@ -34,3 +36,24 @@ def load_gensim_data(year, path='../Files/gensim'):
     }
     
     return corpus, id2word
+
+def plot_topics(model, corpus, num_topics=10, topn=10):
+    top_topics = model.top_topics(corpus=corpus, topn=topn)
+    # fig, ax_list = plt.subplots(np.ceil(num_topics/2), np.ceil(num_topics/2))
+    for t in range(num_topics):
+        topic = top_topics[t][0]
+        words = [pair[1] for pair in topic]
+        probs = [pair[0] for pair in topic]
+        
+        fig, ax = plt.subplots()
+        plt.rcdefaults()
+        y_pos = np.arange(len(words))
+        
+        ax.barh(y_pos, probs, align='center')
+        ax.set_yticks(y_pos)
+        ax.set_yticklabels(words)
+        ax.invert_yaxis()
+        ax.set_xlabel('Probability')
+        ax.set_title(f'Topic rank #{t+1}')
+        
+        plt.show()
