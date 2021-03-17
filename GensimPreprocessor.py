@@ -54,7 +54,9 @@ for opt, val in opts:
 FILE_PATH = '../Files/gensim/'
 
 # Selected years
-SELECTED_YEARS = [int(ARG_MAP['start']), int(ARG_MAP['end'])]
+SELECTED_YEARS = list(range(int(ARG_MAP['start']), int(ARG_MAP['end'])+1))
+print('Processing data from years:')
+print(SELECTED_YEARS)
 
 # Add bigrams and trigrams
 ADD_BIGRAMS = True
@@ -85,17 +87,17 @@ stopwords_total = set(list(STOPWORDS) + cachedWords)
 # In[18]:
 
 
-filtered_by_year = X[X.year_x.isin(SELECTED_YEARS)]
+data.query('year_x in @SELECTED_YEARS', inplace=True)
 items = {
-    'item1a': filtered_by_year['item1a_risk'],
-    'item7': filtered_by_year['item7_mda']
+    'item1a': data['item1a_risk'],
+    'item7': data['item7_mda']
 }
 
 
 # In[19]:
 
 
-print(f'Got {filtered_by_year.shape[0]} documents')
+print(f'Got {data.shape[0]} documents')
 
 
 # In[20]:
