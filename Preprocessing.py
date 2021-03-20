@@ -9,11 +9,11 @@ from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tokenize import RegexpTokenizer
 
 
-def join_filings_metrics(inputFolder, outputFile):
+def join_filings_metrics(input_folder, output_file):
     data_by_year = {}
     relevant_cols = ["cik", "ticker", "filing_date", "item1a_risk", "item7_mda"]
     for year in range(2009,2021):
-        data_by_year[year] = pd.read_csv(inputFolder + str(year) + ".csv", usecols=relevant_cols)
+        data_by_year[year] = pd.read_csv(input_folder + str(year) + ".csv", usecols=relevant_cols)
         data_by_year[year] = data_by_year[year].dropna(subset=['cik', 'item1a_risk', 'item7_mda']).drop_duplicates()
         data_by_year[year]["year"] = year
         data_by_year[year]["filing_date"] = pd.to_datetime(data_by_year[year]["filing_date"])
@@ -42,14 +42,14 @@ def join_filings_metrics(inputFolder, outputFile):
 
     # Load predictions
     relevant_cols = ["PERMID", "CIK", "Ticker", "year", "FilingDate", "company_name", "Dividend Payer", "DPS growth", "DPS cut", "zEnvironmental", "dEnvironmental", "sector"]
-    predictions = pd.read_excel(inputFolder + "predictions.xlsx", sheet_name="data", skiprows=32, usecols=relevant_cols)
+    predictions = pd.read_excel(input_folder + "predictions.xlsx", sheet_name="data", skiprows=32, usecols=relevant_cols)
     predictions.columns = ["perm_id", "cik", "ticker", "year", "filing_date", "company_name", "is_dividend_payer", "dps_change", "is_dps_cut", "z_environmental", "d_environmental", "sector"]
     predictions['perm_id'] = predictions['perm_id'].str.replace(r"[^0-9]",'')
     predictions["filing_date"] = pd.to_datetime(predictions["filing_date"])
     predictions["filing_year"] =  pd.DatetimeIndex(predictions["filing_date"]).year
 
     result = pd.merge(text_dfs, predictions, on=["cik", "filing_date"])
-    result.to_csv(outputFile)
+    result.to_csv(output_file)
 
     del text_dfs
     del predictions
@@ -144,10 +144,10 @@ parser.add_argument("-ws", "--window_size", type = int, required=False, help="Fo
 parser.add_argument("-wo", "--window_overlap", type = int, required=False, help="For sentence_lda, number of overlapping sentences b/t subsequent documents")
     
 args = parser.parse_args()
-    
+print(args)   
     
 if args.job_type == "join_filings_metrics":
-    join_filings_metrics(args.input, args.outputFile)
+    join_filings_metrics(args.input, args.output_file)
 elif args.job_type == "preprocess_data":
     if args.preprocess_type == None:
         print("No preprocessType set")
