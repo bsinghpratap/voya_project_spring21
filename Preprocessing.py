@@ -125,8 +125,9 @@ def preprocess_data(input_file, output_file, process_type, window_size=1, window
             data[label] = data[label].apply(lambda documents: [[lemmatizer.lemmatize(word) for word in doc if is_valid_word(word)] for doc in documents])
     else:
         print("ERROR! invalid process_type")
-        
+    print("Writing to csv")    
     data.to_csv(output_file)
+    print("Write finished")
         
 
 
