@@ -187,7 +187,6 @@ parser.add_argument("-ws", "--window_size", type = int, required=False, help="Fo
 parser.add_argument("-wo", "--window_overlap", type = int, required=False, help="For ppt sentence_lda, number of overlapping sentences b/t subsequent documents")
 parser.add_argument("-sy", "--start_year", type = int, required=False, help="Inclusive start range")
 parser.add_argument("-ey", "--end_year", type = int, required=False, help="Inclusive end range")
-parser.add_argument("-ey", "--end_year", type = int, required=False, help="Inclusive end range")
 parser.add_argument('-p', "--pickled", action='store_true')
 args = parser.parse_args()
 print(args)   
