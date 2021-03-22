@@ -4,6 +4,8 @@ import numpy as np
 import pickle
 import matplotlib.pyplot as plt
 
+SECTORS = ['Industrials', 'Tech', 'Commodities', 'Consumer', 'Health Care', 'Real Estate', 'Utilities']
+
 # Loads data
 # returns: Tuple(all_data, X, y)
 def load_data(path='../Files/', file='processed_data.csv'):
@@ -42,6 +44,22 @@ def load_gensim_data(year, path='../Files/gensim/'):
             objs[sector][item][gtype] = unpickle(f'{year_str}_{sector}_{item}_{gtype}.pkl', path=path+year_str+'/')
     
     return objs
+
+
+def save_models(models, years, path='../models/'):
+
+    path_full = f'{path}{str(years[0])}-{str(years[-1])}/'
+    file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}.gnsm'
+
+    if not os.path.exists(path_full):
+        os.makedirs(path_full)
+
+    for sector in models:
+        for item in models[sector]:
+            model = models[sector][item]
+            file_path_full = path_full + file_name.format(sector, item)
+            model.save(file_path_full)
+
 
 def plot_topics(model, num_topics=10, topn=10):
 #     top_topics = model.top_topics(corpus=corpus, topn=topn)

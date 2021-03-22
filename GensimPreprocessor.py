@@ -183,7 +183,7 @@ if __name__ == '__main__':
                     corpus, id2word = process(data[(data.sector == sector)][items[item]], sentence=SENTENCE)
                     write(corpus, id2word, SELECTED_YEARS, name=sector+'_'+item, path=FILE_PATH)
                 else:
-                    print(f"Found only 1 document for sector {sector} - skipping")
+                    print(f"Skipping sector {sector} with {len(data_slice)} document(s)")
         else:
             corpus, id2word = process(data[items[item]], sentence=SENTENCE)
             write(corpus, id2word, SELECTED_YEARS, name='all_'+item, path=FILE_PATH)
