@@ -5,10 +5,13 @@ import pickle
 import matplotlib.pyplot as plt
 
 SECTORS = ['Industrials', 'Tech', 'Commodities', 'Consumer', 'Health Care', 'Real Estate', 'Utilities']
+ITEMS = ['item1a', 'item7']
 
 # Loads data
 # returns: Tuple(all_data, X, y)
-def load_data(path='../Files/', file='processed_data.csv'):
+
+
+def load_data(path=os.getenv('VOYA_PATH_DATA'), file='processed_data.csv'):
     proc_df = pd.read_csv(path+file, index_col=None)
     X = proc_df[['cik', 'ticker_x', 'filing_date', 'item1a_risk', 'item7_mda', 'year_x', 'filing_year_x']]
     y = proc_df[['perm_id','ticker_y','year_y','company_name','is_dividend_payer','dps_change','is_dps_cut','z_environmental','d_environmental','sector','filing_year_y']]
@@ -22,7 +25,7 @@ def unpickle(file, path='../Files/gensim/'):
     return obj
 
 
-def load_gensim_data(year, path='../Files/gensim/'):
+def load_gensim_data(year, path=os.getenv('VOYA_PATH_DATA_GENSIM')):
     if type(year) in [tuple, list]:
         year_str = str(year[0]) + '-' + str(year[1])
     else:
@@ -46,8 +49,11 @@ def load_gensim_data(year, path='../Files/gensim/'):
     return objs
 
 
-def save_models(models, years, path='../models/'):
-
+def save_models(models, years, path=os.getenv('VOYA_PATH_MODELS')):
+    """Save models to disk
+    models object should be dictionary formatted as follows
+        models[sector][item] = model
+    """
     path_full = f'{path}{str(years[0])}-{str(years[-1])}/'
     file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}.gnsm'
 
@@ -59,6 +65,27 @@ def save_models(models, years, path='../models/'):
             model = models[sector][item]
             file_path_full = path_full + file_name.format(sector, item)
             model.save(file_path_full)
+
+
+def load_models(years, model_class, by_sector=False, path=os.getenv('VOYA_PATH_MODELS')):
+    """Load models from disk
+    output is a dictionary formatted as follows
+        models[sector][item] = model
+    """
+    path_full = f'{path}{str(years[0])}-{str(years[-1])}/'
+    file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}.gnsm'
+
+    sectors = SECTORS if by_sector else ['all']
+
+    models = dict()
+
+    for sector in sectors:
+        models[sector] = dict()
+        for item in ITEMS:
+            model = model_class.load(path_full+file_name.format(sector, item))
+            models[sector][item] = model
+
+    return models
 
 
 def plot_topics(model, num_topics=10, topn=10):

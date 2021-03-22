@@ -20,7 +20,7 @@ from multiprocessing import Pool
 
 # In[9]:
 import sys
-# sys.path.append('C:\\Users\\Alan\\Documents\\Projects School\\696DS\\voya_project_spring21')
+sys.path.append('/')
 
 from util import load_data, load_gensim_data, save_models
 from util import SECTORS
@@ -32,8 +32,8 @@ WORKERS = 16
 
 
 # YEARS = (2012, 2015)
-YEARS = (2012, 2015)
-data = load_gensim_data(YEARS, path='../Files/gensim/')
+YEARS = (2016, 2016)
+data = load_gensim_data(YEARS)
 
 
 
@@ -52,7 +52,6 @@ PARAMS = {
 
 #%%
 
-# TODO: Change back
 def train_model(corpus, id2word, workers=16, model_class=LdaMulticore):
     return model_class(
         corpus=corpus,
@@ -102,75 +101,4 @@ if __name__ == '__main__':
         if TEST_RUN:
             break
 
-    # pool = Pool()
-    # pool_dict = dict()
-
-    # for sector in data:
-    #     pool_dict[sector] = dict()
-    #     for item in data[sector]:
-    #         call_args = (data[sector][item]['corpus'], data[sector][item]['id2word'])
-    #         # call_dict = dict(model_class=LdaModel)
-    #         res = pool.apply_async(train_model, call_args)
-    #         pool_dict[sector][item] = res
-    #
-    #         break  # TODO: Remove
-    #     break
-    #
-    # models = dict()
-    #
-    # for sector in data:
-    #     models[sector] = dict()
-    #     for item in data[sector]:
-    #         model = pool_dict[sector][item].get()
-    #         models[sector][item] = model
-
     save_models(models, YEARS)
-
-
-# In[7]:
-
-
-# models['item1a'].print_topics(num_topics=5, num_words=5)
-# models['item7'].print_topics(num_topics=5, num_words=5)
-
-
-# Look at things your throwing out in filtering
-# Look at strange occurences "duke"
-# Look at total perecent of words that are made up
-# Split by sector
-
-
-# In[ ]:
-
-
-# for model_name in models:
-#     models[model_name].save(f'./{YEARS[0]}-{YEARS[1]}_{model_name}.gnsm')
-
-
-# In[96]:
-
-
-# results = []
-# for doc_idx in range(item1a.shape[0]):
-#     result_doc = {}
-#     for item in items:
-#         lda_model = models[item]
-#         scores = []
-#         topics = []
-#         for index, score in sorted(lda_model[corpus[item][doc_idx]], key=lambda tup: -1*tup[1]):
-# #             print ("Score: {}\t Topic ID: {} Topic: {}".format(score, index, lda_model.print_topic(index, 10)))
-#             topics.append(dictionaries[item][index])
-#             scores.append(score)
-#         result_doc[item] = (topics, scores)
-#     results.append(result_doc)
-
-
-# In[150]:
-
-
-# for item in items:
-#     lda_model = models[item]
-#     print(f'{item}:')
-#     print(lda_model.alpha)
-#     print(lda_model.eta)
-

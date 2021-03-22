@@ -9,11 +9,12 @@ import numpy as np
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem.wordnet import WordNetLemmatizer
 from gensim.models.ldamulticore import LdaMulticore
-import os
 
 from gensim.models import Phrases
 from gensim.parsing.preprocessing import preprocess_string, remove_stopwords, strip_numeric, strip_punctuation, strip_short, stem_text
 import matplotlib.pyplot as plt
+
+from multiprocessing import Pool
 
 
 # In[2]:
@@ -36,6 +37,7 @@ Run file in shell with arguments start and end.
 
 # In[16]:
 import sys, getopt
+import os
 
 FILE_PATH = '../Files/gensim/'
 
@@ -130,7 +132,17 @@ def write(corpus, id2word, years, name='data', path='../Files/gensim/'):
         with open(path_full+base_name.format(name, obj), 'wb') as file:
             pickle.dump(str_mapping[obj], file)
 
-            
+
+def process_sector(data_slice, sector, item, selected_years, sentence):
+    print('Processing sector: ', sector)
+    if len(data_slice) > 1 and 'Unavailable' not in str(sector):  # Sector unavailable
+        corpus, id2word = process(data_slice, sentence=sentence)
+        write(corpus, id2word, selected_years, name=sector + '_' + item)
+    else:
+        print(f"Skipping sector {sector} with {len(data_slice)} document(s)")
+    print('Finished processing sector:', sector)
+
+
 if __name__ == '__main__':
     
     argv = sys.argv[1:]
@@ -165,6 +177,8 @@ if __name__ == '__main__':
     data.query('year_x in @SELECTED_YEARS', inplace=True)
     del X
     del y
+
+    print(f'Got {data.shape[0]} documents for processing')
     
     
     items = {
@@ -172,21 +186,19 @@ if __name__ == '__main__':
         'item7': 'item7_mda'
     }
     
-    sectors = pd.unique(data['sector'])
+    sectors = pd.unique(data['sector']) if SPLIT_BY_SECTORS else ['all']
+
+    pool = Pool()
+    procs = list()
     
     for item in items:
-        if SPLIT_BY_SECTORS:
-            for sector in sectors:
-                print('Processing sector: ', sector)
-                data_slice = data[(data.sector == sector)][items[item]]
-                if len(data_slice) > 1 and 'Unavailable' not in str(sector): # Sector unavailable
-                    corpus, id2word = process(data[(data.sector == sector)][items[item]], sentence=SENTENCE)
-                    write(corpus, id2word, SELECTED_YEARS, name=sector+'_'+item, path=FILE_PATH)
-                else:
-                    print(f"Skipping sector {sector} with {len(data_slice)} document(s)")
-        else:
-            corpus, id2word = process(data[items[item]], sentence=SENTENCE)
-            write(corpus, id2word, SELECTED_YEARS, name='all_'+item, path=FILE_PATH)
+        for sector in sectors:
+            data_slice = data[(data.sector == sector)][items[item]]
+            call_args = (data_slice, sector, item, SELECTED_YEARS, SENTENCE)
+            procs.append(pool.apply_async(process_sector, call_args))
+        # else:
+        #     corpus, id2word = process(data[items[item]], sentence=SENTENCE)
+        #     write(corpus, id2word, SELECTED_YEARS, name='all_'+item)
 
-
-    print(f'Got {data.shape[0]} documents')
+    for proc in procs:
+        proc.get()
