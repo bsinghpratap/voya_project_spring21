@@ -13,6 +13,7 @@ from gensim.models.ldamulticore import LdaMulticore
 from gensim.models import Phrases
 from gensim.parsing.preprocessing import preprocess_string, remove_stopwords, strip_numeric, strip_punctuation, strip_short, stem_text
 import matplotlib.pyplot as plt
+import pickle
 
 from multiprocessing import Pool
 
@@ -66,7 +67,7 @@ stopwords_total = set(list(STOPWORDS) + cachedWords)
 # display(stopwords_total) # No financial terms
 
 
-def process(docs, sentence=False):
+def process(docs, sentence=False, return_dictionary=False):
     
     tokenizer = RegexpTokenizer(r'\w+')
     for idx in range(len(docs)):
@@ -102,61 +103,55 @@ def process(docs, sentence=False):
     print('\tNumber of unique tokens: %d' % len(dictionary))
     print('\tNumber of documents: %d' % len(corpus))
 
-
-
     _temp = dictionary[0] # Initialize id2token mappings
     id2word = dictionary.id2token
-    
-    return corpus, id2word
+
+    if not return_dictionary:
+        return corpus, id2word
+    else:
+        return dictionary
 
 
-def write(corpus, id2word, years, name='data', path='../Files/gensim/'):
-    
-    import pickle
-
+def write(obj, years, name='data', path=os.getenv('VOYA_PATH_DATA_GENSIM'), dictionary=False):
     base_name = f'{str(years[0])}-{str(years[-1])}'
-#     if len(years) > 1: base_name += f'-{years[-1]}'
     path_full = path+base_name+'/'
-    
-    base_name += '_{}_{}.pkl'
+    base_name += '_{}_{}'
 
-    str_mapping = {
-        'corpus': corpus,
-        'id2word': id2word
-    }
-    
     if not os.path.exists(path_full):
         os.makedirs(path_full)
 
-    for obj in str_mapping:
-        with open(path_full+base_name.format(name, obj), 'wb') as file:
-            pickle.dump(str_mapping[obj], file)
-
-
-def process_sector(data_slice, sector, item, selected_years, sentence):
-    print('Processing sector: ', sector)
-    if len(data_slice) > 1 and 'Unavailable' not in str(sector):  # Sector unavailable
-        corpus, id2word = process(data_slice, sentence=sentence)
-        write(corpus, id2word, selected_years, name=sector + '_' + item)
+    if not dictionary:
+        base_name += '.pkl'
+        str_mapping = {'corpus': obj[0], 'id2word': obj[1]}
+        for obj in str_mapping:
+            with open(path_full + base_name.format(name, obj), 'wb') as file:
+                pickle.dump(str_mapping[obj], file)
     else:
+        obj.save(path_full + base_name.format(name, 'dictionary'))
+
+
+def process_sector(data_slice, sector, item, selected_years, sentence, dictionary):
+    print('Processing sector: ', sector)
+    if len(data_slice) > 1 and 'Unavailable' not in str(sector):
+        obj = process(data_slice, sentence=sentence, return_dictionary=dictionary)
+        write(obj, selected_years, name=sector + '_' + item, dictionary=dictionary)
+    else:  # Sector unavailable
         print(f"Skipping sector {sector} with {len(data_slice)} document(s)")
-    print('Finished processing sector:', sector)
+    print('Finished processing:', item, sector)
 
 
 if __name__ == '__main__':
     
     argv = sys.argv[1:]
 
-    opts, args = getopt.getopt(argv, '', ['start=', 'end=', 'sectors', 'sentence'])
+    opts, args = getopt.getopt(argv, '', ['start=', 'end=', 'sectors', 'sentence', 'dictionary'])
 
     ARG_MAP = {
         'start': 2009,
         'end': 2020,
         'sectors': False,
-        'sentence': False
-    #     'bigrams': True,
-    #     'bigram-min-count': 20,
-    #     'filter-no-below': 20
+        'sentence': False,
+        'dictionary': False
     }
 
     for opt, val in opts:
@@ -172,6 +167,9 @@ if __name__ == '__main__':
     
     SENTENCE = ARG_MAP['sentence']
     print(f'Processing for sentence LDA: {SENTENCE}')
+
+    DICTIONARY = ARG_MAP['dictionary']
+    print('Giving dictionary as output:', DICTIONARY)
     
     data, X, y = load_data()
     data.query('year_x in @SELECTED_YEARS', inplace=True)
@@ -179,8 +177,7 @@ if __name__ == '__main__':
     del y
 
     print(f'Got {data.shape[0]} documents for processing')
-    
-    
+
     items = {
         'item1a': 'item1a_risk',
         'item7': 'item7_mda'
@@ -194,7 +191,7 @@ if __name__ == '__main__':
     for item in items:
         for sector in sectors:
             data_slice = data[(data.sector == sector)][items[item]]
-            call_args = (data_slice, sector, item, SELECTED_YEARS, SENTENCE)
+            call_args = (data_slice, sector, item, SELECTED_YEARS, SENTENCE, DICTIONARY)
             procs.append(pool.apply_async(process_sector, call_args))
         # else:
         #     corpus, id2word = process(data[items[item]], sentence=SENTENCE)

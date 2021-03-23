@@ -7,11 +7,11 @@ import matplotlib.pyplot as plt
 SECTORS = ['Industrials', 'Tech', 'Commodities', 'Consumer', 'Health Care', 'Real Estate', 'Utilities']
 ITEMS = ['item1a', 'item7']
 
-# Loads data
-# returns: Tuple(all_data, X, y)
-
 
 def load_data(path=os.getenv('VOYA_PATH_DATA'), file='processed_data.csv'):
+    """Loads data
+    returns: Tuple(all_data, X, y)
+    """
     proc_df = pd.read_csv(path+file, index_col=None)
     sort_data_inplace(proc_df)
     X = proc_df[['cik', 'ticker_x', 'filing_date', 'item1a_risk', 'item7_mda', 'year_x', 'filing_year_x']]
