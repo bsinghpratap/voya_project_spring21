@@ -11,7 +11,7 @@ import pandas as pd
 import ast
 from gensim.corpora import Dictionary
 from gensim.models.ldamulticore import LdaMulticore
-
+import pickle
 
 def join_filings_metrics(input_folder, output_file):
     data_by_year = {}
@@ -60,44 +60,53 @@ def join_filings_metrics(input_folder, output_file):
     del result
 
 
-def sentence_lda(input_file, output_file, start, end, ws, is_pickled):
+def sentence_lda(input_file, output_file, start, end, ws, is_pickled, label):
     print("Reading {}".format(input_file))
     if is_pickled:
-        data = pd.read_csv(input_file)
-    else:
         data = pd.read_pickle(input_file)
+    else:
+        data = pd.read_csv(input_file)
     data_slice =  data[(data.year_x >= start) & (data.year_x <= end)]
     params = {
+        "random_state":10,
         'num_topics': 30,
-        'chunksize': 2000,
+        'chunksize': 50,
         'passes': 20,
         'iterations': 400,
         'eval_every': None,
         'alpha': 'asymmetric',
         'eta': 'auto'
     }
+    print(params["chunksize"])
 
-    for label in ["item1a_risk", "item7_mda"]:
-        print(label)
-        print("Collapsing documents")
-        documents = [sentence_grp for doc in data_slice[label].to_list() for sentence_grp in doc]
+    
+    print(label)
+    print("Collapsing documents")
+    documents = [sentence_grp for doc in data_slice[label].to_list() for sentence_grp in doc]
 
-        dictionary = Dictionary(documents)
-        corpus = [dictionary.doc2bow(doc) for doc in documents]
-        _temp = dictionary[0] # Initialize id2token mappings
-        id2word = dictionary.id2token
+    dictionary = Dictionary(documents)
+    print(len(dictionary))
+    dictionary.filter_extremes(no_below=10)
+    print(len(dictionary))
+    corpus = [dictionary.doc2bow(doc) for doc in documents]
+    _temp = dictionary[0] # Initialize id2token mappings
+    id2word = dictionary.id2token
 
-        print("Running LDA")
-        lda = LdaMulticore(corpus=corpus, id2word=id2word, workers=32,**params)
+    print("Saving dictionary")
+    with open(output_file + "sen_dict_" + label + "_" + str(ws), 'wb') as file:
+        pickle.dump(dictionary, file)
 
-        print("Saving LDA")
-        lda.save(output_file + "sen_lda_" + label + "_" + str(ws) + ".model")
-        del documents
-        del dictionary
-        del corpus
-        del _temp
-        del id2word
-        del lda
+    print("Running LDA")
+    lda = LdaMulticore(corpus=corpus, id2word=id2word, workers=8,**params)
+
+    print("Saving LDA")
+    lda.save(output_file + "sen_lda_" + label + "_" + str(ws) + ".model")
+    del documents
+    del dictionary
+    del corpus
+    del _temp
+    del id2word
+    del lda
 
 def split_period(txt, window_size, window_overlap):
     sentences = txt.split(".")
@@ -174,6 +183,7 @@ def preprocess_data(input_file, output_file, process_type, window_size=1, window
 import argparse
 JOB_TYPES = ["preprocess_data", "join_filings_metrics", "sentence_lda"]
 PREPROCESS_TYPES = ["vanilla_lda", "sentence_lda"]
+VALID_LABELS = ["item1a_risk", "item7_mda"]
 
 parser = argparse.ArgumentParser()
 # Required
@@ -188,6 +198,7 @@ parser.add_argument("-wo", "--window_overlap", type = int, required=False, help=
 parser.add_argument("-sy", "--start_year", type = int, required=False, help="Inclusive start range")
 parser.add_argument("-ey", "--end_year", type = int, required=False, help="Inclusive end range")
 parser.add_argument('-p', "--pickled", action='store_true')
+parser.add_argument("-l", "--label", required=False, choices=VALID_LABELS, help="For lda, text column label to use")
 args = parser.parse_args()
 print(args)   
     
@@ -208,6 +219,9 @@ elif args.job_type == "sentence_lda":
     if args.window_size == None:
         print("No window size declared")
         quit()
-    sentence_lda(args.input, args.output_file, args.start_year, args.end_year, args.window_size, args.pickled)
+    if args.label == None:
+        print("No label chosen")
+        quit()
+    sentence_lda(args.input, args.output_file, args.start_year, args.end_year, args.window_size, args.pickled, args.label)
 else:
     print("JobType Error")
