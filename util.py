@@ -13,10 +13,18 @@ ITEMS = ['item1a', 'item7']
 
 def load_data(path=os.getenv('VOYA_PATH_DATA'), file='processed_data.csv'):
     proc_df = pd.read_csv(path+file, index_col=None)
+    sort_data_inplace(proc_df)
     X = proc_df[['cik', 'ticker_x', 'filing_date', 'item1a_risk', 'item7_mda', 'year_x', 'filing_year_x']]
     y = proc_df[['perm_id','ticker_y','year_y','company_name','is_dividend_payer','dps_change','is_dps_cut','z_environmental','d_environmental','sector','filing_year_y']]
     
     return proc_df, X, y
+
+
+def sort_data_inplace(data):
+    """Sort data frame by columns
+    (cik, ticker) inplace
+    """
+    data.sort_values(by=['year_x', 'cik', 'ticker_x'], inplace=True)
 
 
 def unpickle(file, path='../Files/gensim/'):
