@@ -1,8 +1,11 @@
 import os
+import sys
+import getopt
 import pandas as pd
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+from gensim.corpora import Dictionary
 
 SECTORS = ['Industrials', 'Tech', 'Commodities', 'Consumer', 'Health Care', 'Real Estate', 'Utilities']
 ITEMS = ['item1a', 'item7']
@@ -33,27 +36,30 @@ def unpickle(file, path='../Files/gensim/'):
     return obj
 
 
-def load_gensim_data(year, path=os.getenv('VOYA_PATH_DATA_GENSIM')):
-    if type(year) in [tuple, list]:
-        year_str = str(year[0]) + '-' + str(year[1])
-    else:
-        year_str = str(year) + '-' + str(year)
-        
+def load_gensim_data(years, path=os.getenv('VOYA_PATH_DATA_GENSIM'), dictionary=False):
+    """:returns
+        dictionary=False -> dict[sector][item][corpus/id2word] = Corpus/Id2word
+        dictionary=True -> dict[sector][item] = Dictionary
+    """
+    year_str = str(years[0]) + '-' + str(years[-1])
     objs = dict()
-    
     for filename in os.listdir(path+year_str+'/'):
-        if filename.endswith('.pkl'):   
+        if filename.endswith('.pkl') or filename.endswith('.gnsm'):
             _, sector, item, gtype = filename.split('_')
             gtype = gtype.split('.')[0]
-            
-            if sector not in objs:
-                objs[sector] = {
-                    'item1a': dict(),
-                    'item7': dict()
-                }
-            
-            objs[sector][item][gtype] = unpickle(f'{year_str}_{sector}_{item}_{gtype}.pkl', path=path+year_str+'/')
-    
+
+            if not dictionary and gtype != 'dictionary':
+                if sector not in objs:
+                    objs[sector] = {
+                        'item1a': dict(),
+                        'item7': dict()
+                    }
+                objs[sector][item][gtype] = unpickle(f'{year_str}_{sector}_{item}_{gtype}.pkl', path=path+year_str+'/')
+            elif dictionary and gtype == 'dictionary':
+                if sector not in objs:
+                    objs[sector] = dict()
+                objs[sector][item] = Dictionary.load(path+year_str+'/'+f'{year_str}_{sector}_{item}_{gtype}.gnsm')
+
     return objs
 
 
@@ -96,15 +102,34 @@ def load_models(years, model_class, by_sector=False, path=os.getenv('VOYA_PATH_M
     return models
 
 
-def plot_topics(model, num_topics=10, topn=10):
+def get_args(arg_map):
+    options = list()
+    for key in arg_map:
+        if type(arg_map[key]) is bool:
+            options.append(key)
+        else:
+            options.append(key+'=')
+
+    argv = sys.argv[1:]
+    opts, args = getopt.getopt(argv, '', options)
+
+    for opt, val in opts:
+        arg_map[opt[2:]] = val if val else True
+
+    return arg_map
+
+
+def plot_topics(model, num_topics=10, topn=10, title=None):
 #     top_topics = model.top_topics(corpus=corpus, topn=topn)
     # fig, ax_list = plt.subplots(np.ceil(num_topics/2), np.ceil(num_topics/2))
+
     for t in range(num_topics):
         topic = model.show_topic(t, topn=topn)
         words = [pair[0] for pair in topic]
         probs = [pair[1] for pair in topic]
         
         fig, ax = plt.subplots()
+        plt.tight_layout()
         plt.rcdefaults()
         y_pos = np.arange(len(words))
         
@@ -113,6 +138,7 @@ def plot_topics(model, num_topics=10, topn=10):
         ax.set_yticklabels(words)
         ax.invert_yaxis()
         ax.set_xlabel('Probability')
-        ax.set_title(f'Topic id: {t+1}')
+        # ax.set_title(f'Topic id: {t+1}')
+        ax.set_title(title)
         
         plt.show()

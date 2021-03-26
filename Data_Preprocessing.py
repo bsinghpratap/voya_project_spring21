@@ -45,7 +45,7 @@ cachedWords = stopwords.words('english')
 stopwords_total = set(list(STOPWORDS) + cachedWords)
 def remove_stopwords(txt):
     return " ".join([word for word in txt.split() if (word not in stopwords_total)])
-PREPROCESS_TEXT_FILTERS = [strip_punctuation, strip_numeric, remove_stopwords, stem_text, lambda x: strip_short(x, minsize=3)]
+PREPROCESS_TEXT_FILTERS = [strip_punctuation, strip_numeric, remove_stopwords, lambda x: strip_short(x, minsize=3)]
 print("Preprocessing 1a")
 for filt in PREPROCESS_TEXT_FILTERS:
     text_dfs["item1a_risk"] = text_dfs["item1a_risk"].apply(filt)

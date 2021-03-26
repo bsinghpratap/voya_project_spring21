@@ -67,13 +67,25 @@ stopwords_total = set(list(STOPWORDS) + cachedWords)
 # display(stopwords_total) # No financial terms
 
 
-def process(docs, sentence=False, return_dictionary=False):
-    
+def process(docs,
+            sentence=False,
+            return_dictionary=False,
+            single_doc=False,
+            verbose=True,
+            dictionary=None,
+            return_docs=False):
+    if single_doc:
+        docs = pd.Series([docs])
+    else:
+        docs = docs.copy()
     tokenizer = RegexpTokenizer(r'\w+')
     for idx in range(len(docs)):
         docs.iloc[idx] = docs.iloc[idx].lower()  # Convert to lowercase.
         docs.iloc[idx] = tokenizer.tokenize(docs.iloc[idx])  # Split into words.
         docs.iloc[idx] = docs.iloc[idx][4:] # Remove first 4 words
+
+    # if single_doc:
+    #     docs = pd.Series([docs])
 
     # Remove numbers, but not words that contain numbers.
     docs = pd.Series([[token for token in doc if not token.isnumeric()] for doc in docs])
@@ -84,6 +96,7 @@ def process(docs, sentence=False, return_dictionary=False):
     lemmatizer = WordNetLemmatizer()
     docs = pd.Series([[lemmatizer.lemmatize(token) for token in doc] for doc in docs])
 
+
     # Add bigrams and trigrams to docs (only ones that appear BIGRAMS_MIN_COUNT times or more).
     if ADD_BIGRAMS:
         bigram = Phrases(docs, min_count=BIGRAMS_MIN_COUNT)
@@ -93,23 +106,31 @@ def process(docs, sentence=False, return_dictionary=False):
                     # Token is a bigram, add to document.
                     docs[idx].append(token)
 
-    dictionary = Dictionary(docs)
+    if return_docs:
+        return docs
+
+    if dictionary is None:
+        dictionary = Dictionary(docs)
 
     # Filter out words that occur in less than FILTER_NO_BELOW documents.
-    dictionary.filter_extremes(no_below=FILTER_NO_BELOW)
+    if not single_doc:
+        dictionary.filter_extremes(no_below=FILTER_NO_BELOW)
 
     corpus = [dictionary.doc2bow(doc) for doc in docs]
 
-    print('\tNumber of unique tokens: %d' % len(dictionary))
-    print('\tNumber of documents: %d' % len(corpus))
+    if verbose:
+        print('\tNumber of unique tokens: %d' % len(dictionary))
+        print('\tNumber of documents: %d' % len(corpus))
 
-    _temp = dictionary[0] # Initialize id2token mappings
-    id2word = dictionary.id2token
-
-    if not return_dictionary:
-        return corpus, id2word
+    if not single_doc:
+        _temp = dictionary[0]  # Initialize id2token mappings
+        id2word = dictionary.id2token
+        if not return_dictionary:
+            return corpus, id2word
+        else:
+            return dictionary
     else:
-        return dictionary
+        return corpus[0]
 
 
 def write(obj, years, name='data', path=os.getenv('VOYA_PATH_DATA_GENSIM'), dictionary=False):
@@ -127,6 +148,7 @@ def write(obj, years, name='data', path=os.getenv('VOYA_PATH_DATA_GENSIM'), dict
             with open(path_full + base_name.format(name, obj), 'wb') as file:
                 pickle.dump(str_mapping[obj], file)
     else:
+        base_name += '.gnsm'
         obj.save(path_full + base_name.format(name, 'dictionary'))
 
 
