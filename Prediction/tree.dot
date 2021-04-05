@@ -1,0 +1,33 @@
+digraph Tree {
+node [shape=box, style="rounded", color="black", fontname=helvetica] ;
+edge [fontname=helvetica] ;
+0 [label="risk_topic_0 <= 0.1\ngini = 0.5\nsamples = 3276\nvalue = [5175.3, 5421.2]"] ;
+1 [label="mda_topic_8 <= 0.2\ngini = 0.5\nsamples = 2934\nvalue = [4628.1, 5234.8]"] ;
+0 -> 1 [labeldistance=2.5, labelangle=45, headlabel="True"] ;
+2 [label="mda_topic_27 <= 0.0\ngini = 0.5\nsamples = 1225\nvalue = [1988.2, 1638.4]"] ;
+1 -> 2 ;
+3 [label="gini = 0.5\nsamples = 1104\nvalue = [1777.8, 1625.0]"] ;
+2 -> 3 ;
+4 [label="gini = 0.1\nsamples = 121\nvalue = [210.4, 13.3]"] ;
+2 -> 4 ;
+5 [label="risk_topic_18 <= 0.1\ngini = 0.5\nsamples = 1709\nvalue = [2640.0, 3596.4]"] ;
+1 -> 5 ;
+6 [label="gini = 0.5\nsamples = 1669\nvalue = [2595.3, 3330.0]"] ;
+5 -> 6 ;
+7 [label="gini = 0.2\nsamples = 40\nvalue = [44.7, 266.4]"] ;
+5 -> 7 ;
+8 [label="mda_topic_23 <= 0.0\ngini = 0.4\nsamples = 342\nvalue = [547.2, 186.5]"] ;
+0 -> 8 [labeldistance=2.5, labelangle=-45, headlabel="False"] ;
+9 [label="mda_topic_22 <= 0.0\ngini = 0.5\nsamples = 88\nvalue = [128.6, 93.2]"] ;
+8 -> 9 ;
+10 [label="gini = 0.4\nsamples = 80\nvalue = [121.0, 40.0]"] ;
+9 -> 10 ;
+11 [label="gini = 0.2\nsamples = 8\nvalue = [7.6, 53.3]"] ;
+9 -> 11 ;
+12 [label="mda_topic_28 <= 0.2\ngini = 0.3\nsamples = 254\nvalue = [418.6, 93.2]"] ;
+8 -> 12 ;
+13 [label="gini = 0.2\nsamples = 238\nvalue = [402.2, 53.3]"] ;
+12 -> 13 ;
+14 [label="gini = 0.4\nsamples = 16\nvalue = [16.4, 40.0]"] ;
+12 -> 14 ;
+}
