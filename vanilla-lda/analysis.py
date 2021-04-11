@@ -1,36 +1,39 @@
 from gensim.models.ldamulticore import LdaMulticore
 from gensim.models.coherencemodel import CoherenceModel
-from util import load_data, load_models, load_gensim_data, plot_topics, SECTORS, ITEMS
+from util import load_data, load_models, load_gensim_data, plot_topics, plot_coherence, SECTORS, ITEMS
 from GensimPreprocessor import process
-
-from multiprocessing import Pool
+SECTORS = ['all', *SECTORS]
+# from multiprocessing import Pool
 #%% Parameters
 FUNCTION = "coherence"
 years = (2012, 2015)
-coherence = 'c_v'
+coherence = 'u_mass'
+# coherence = 'c_npmi'
 
 #%% Load Models
 models = load_models(years, model_class=LdaMulticore, by_sector=True)
+models['all'] = load_models(years, model_class=LdaMulticore, by_sector=False)['all']
+
+""" Topic Plotting """
+# %% Plot Topics
+# for item in ['item1a', 'item7']:
+#     for sector in SECTORS:
+#         title = f'sector: {sector}-{item}, topic_id: ' + '{}'
+#         plot_topics(models[sector][item], num_topics=3, topn=7, title=title, path='../figures/vanillalda')
+
+
+""" Coherence """
 #%% Load Data
 data, _, _ = load_data()
 data.query('year_x in @years', inplace=True)
 
-
-""" Topic Plotting """
-#%% Plot Topics
-# for item in ['item1a']:
-#     for sector in SECTORS:
-#         title = 'Sector:', sector, 'item:', item
-#         plot_topics(models[sector][item], 5, 10, title=title)
-
-
-""" Coherence """
-#%% Get coherence per sector
+#%% Setup
 coherence_scores = dict()
 gensim_data = load_gensim_data(years)
 dicts = load_gensim_data(years, dictionary=True)
 
-pool = Pool()
+#%% Get coherence per sector
+# pool = Pool()
 procs = list()
 
 
@@ -45,7 +48,10 @@ def get_coherence(sector, item, coherence_scores):
 
     if coherence != 'u_mass':
         item_col = 'item1a_risk' if item == 'item1a' else 'item7_mda'
-        docs = data.query('sector == @sector')[item_col]
+        if sector == 'all':
+            docs = data[item_col]
+        else:
+            docs = data.query('sector == @sector')[item_col]
         params['texts'] = process(docs, return_docs=True).to_list()
     else:
         params['corpus'] = corpus
@@ -54,6 +60,8 @@ def get_coherence(sector, item, coherence_scores):
     coherence_scores[sector][item] = cm.get_coherence()
     print("Completed coherence for:", sector, item)
 
+
+# for sector in SECTORS:
 for sector in SECTORS:
     coherence_scores[sector] = dict()
     for item in ITEMS:
@@ -79,3 +87,6 @@ for sector in SECTORS:
 
     #     break
     # break
+
+#%% Plot Coherence
+plot_coherence(coherence_scores, title=f'Coherence Scores: {coherence}')

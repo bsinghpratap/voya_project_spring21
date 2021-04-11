@@ -2,13 +2,27 @@ import pandas as pd
 import numpy as np
 
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.metrics import f1_score
+from sklearn.metrics import f1_score, cohen_kappa_score
 
 from gensim.corpora import Dictionary
 from gensim.models.ldamulticore import LdaMulticore
 
-from util import load_data, load_gensim_data, get_args, load_models, SECTORS
+from imblearn.over_sampling import SMOTE
+
+from util import load_data, load_gensim_data, get_args, load_models, SECTORS, ITEMS
 from GensimPreprocessor import process
+
+#%% Model Args
+RF_PARAMS = {
+    'n_estimators': 30,
+    'warm_start': False,
+    'max_depth': 3
+}
+
+SMOTE_PARAMS = {
+    'sampling_strategy': 0.5,
+    'random_state': 22
+}
 
 #%% Get command line arguments
 args = {
@@ -22,7 +36,8 @@ years = list(range(int(args['start']), int(args['end'])+1))
 #%% Load Dict
 dictionaries = load_gensim_data(years, dictionary=True)
 #%% Load Data
-data_all, data_X, data_y = load_data(file='processed_data.csv')
+data_all, _, _ = load_data(file='processed_data.csv')
+data_all.query('year_x in @years | year_x == @args.get("predict")', inplace=True)
 #%% Load Trained Models
 models = load_models(years, LdaMulticore, by_sector=True)
 
@@ -51,49 +66,66 @@ def get_weights(model, corpus_list):
             weights[idx][topic[0]] = topic[1]
     return weights
 
+
 #%%
 def get_preds(sector, item):
-    """:returns (predictions, true)"""
+    """:returns (predictions, true_values)"""
     # Define models
-    rf = RandomForestClassifier(n_estimators=10, warm_start=False)
+    rf = RandomForestClassifier(**RF_PARAMS)
     dictionary = dictionaries[sector][item]
     # Get weights for training
     # X_train_docs = data_train[(data_train.year_x in years) & (data_train.sector == sector)]
-    X_train_docs = data_train.query('year_x in @years' and 'sector == @sector')
+    X_train_docs = data_train.query('year_x in @years & sector == @sector')
     X_train_corpus = [process(doc, single_doc=True, dictionary=dictionary, verbose=False) for doc in X_train_docs['item1a_risk']]
     X_train_weights = get_weights(models[sector][item], X_train_corpus)
 
+    # Oversample
+    over_sampler = SMOTE(**SMOTE_PARAMS)
+    X_train_weights_sm, X_train_target_sm = over_sampler.fit_resample(X_train_weights, X_train_docs['is_dps_cut'])
     # Train model
-    rf.fit(X_train_weights, X_train_docs['is_dps_cut'])
+    rf.fit(X_train_weights_sm, X_train_target_sm)
 
     # Get weights for prediction
-    X_test_docs = data_test.query('year_x in @years' and 'sector == @sector')
+    X_test_docs = data_test.query('year_x == @args.get("predict") & sector == @sector')
     X_test_corpus = [process(doc, single_doc=True, verbose=False) for doc in X_test_docs['item1a_risk']]
     X_test_weights = get_weights(models[sector][item], X_test_corpus)
 
     # Make predictions
     y_pred = rf.predict(X_test_weights)
-    return y_pred, X_test_docs['is_dps_cut']
+    return y_pred, X_test_docs['is_dps_cut'].values
+
 
 #%% Isolate single sector and year for development purposes TODO: Make dynamic
 item = 'item1a'
 
 #%% Train Models
-preds = list()
-true = list()
+preds = dict()
+true = dict()
 for sector in SECTORS:
-    results = get_preds(sector, item)
-    preds.append(results[0])
-    true.append(results[1])
-    print('Completed sector:', sector)
+    preds[sector] = dict()
+    true[sector] = dict()
+    for item in ITEMS:
+        try:
+            results = get_preds(sector, item)
+        except ValueError:
+            print("Got value error:", sector, item)
+            continue
+        preds[sector][item] = results[0]
+        true[sector][item] = results[1]
+        print(sector, item,
+              "\n\tF1:", f1_score(results[1], results[0]),
+              "\n\tCK:", cohen_kappa_score(results[1], results[0])
+        )
+
 
 #%% Parse Results
-preds_df = pd.DataFrame(preds[:][:])
-preds_df[preds_df.isna()] = 0
-# preds_df.to_csv('./predictions.csv')
-true_df = pd.DataFrame(true[:][:])
-true_df[true_df.isna()] = 0
+# preds_df = pd.DataFrame(preds[:][:])
+# preds_df[preds_df.isna()] = 0
+# # preds_df.to_csv('./predictions.csv')
+# true_df = pd.DataFrame(true[:][:])
+# true_df[true_df.isna()] = 0
 
 #%% Get Score
-f1_score(true_df, preds_df)
-
+# for sector in SECTORS:
+#     for item in ITEMS:
+#         print(sector, item, "F1:", f1_score(true[sector][item], preds[sector][item]))

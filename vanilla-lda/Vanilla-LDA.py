@@ -28,7 +28,7 @@ from util import SECTORS
 
 # In[12]:
 TEST_RUN = False
-WORKERS = 16
+WORKERS = 8
 
 
 YEARS = (2012, 2015)
@@ -83,7 +83,8 @@ if __name__ == '__main__':
 
     models = dict()
 
-    for sector in data:
+    # for sector in data:
+    for sector in ['all']:
         models[sector] = dict()
         for item in data[sector]:
 

@@ -212,7 +212,10 @@ if __name__ == '__main__':
     
     for item in items:
         for sector in sectors:
-            data_slice = data[(data.sector == sector)][items[item]]
+            if SPLIT_BY_SECTORS:
+                data_slice = data[(data.sector == sector)][items[item]]
+            else:
+                data_slice = data[items[item]]
             call_args = (data_slice, sector, item, SELECTED_YEARS, SENTENCE, DICTIONARY)
             procs.append(pool.apply_async(process_sector, call_args))
         # else:

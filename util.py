@@ -5,11 +5,13 @@ import pandas as pd
 import numpy as np
 import pickle
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
 from gensim.corpora import Dictionary
 
 SECTORS = ['Industrials', 'Tech', 'Commodities', 'Consumer', 'Health Care', 'Real Estate', 'Utilities']
 ITEMS = ['item1a', 'item7']
 
+rcParams.update({'figure.autolayout': True})
 
 def load_data(path=os.getenv('VOYA_PATH_DATA'), file='processed_data.csv'):
     """Loads data
@@ -119,7 +121,7 @@ def get_args(arg_map):
     return arg_map
 
 
-def plot_topics(model, num_topics=10, topn=10, title=None):
+def plot_topics(model, num_topics=10, topn=10, title=None, path=None):
 #     top_topics = model.top_topics(corpus=corpus, topn=topn)
     # fig, ax_list = plt.subplots(np.ceil(num_topics/2), np.ceil(num_topics/2))
 
@@ -129,16 +131,46 @@ def plot_topics(model, num_topics=10, topn=10, title=None):
         probs = [pair[1] for pair in topic]
         
         fig, ax = plt.subplots()
-        plt.tight_layout()
+        fig.subplots_adjust(left=0.2)
+        # plt.tight_layout()
         plt.rcdefaults()
         y_pos = np.arange(len(words))
         
         ax.barh(y_pos, probs, align='center')
         ax.set_yticks(y_pos)
-        ax.set_yticklabels(words)
+        ax.set_yticklabels(words, rotation=30)
         ax.invert_yaxis()
         ax.set_xlabel('Probability')
         # ax.set_title(f'Topic id: {t+1}')
-        ax.set_title(title)
-        
-        plt.show()
+        plt_title = title.format(t+1)
+        ax.set_title(plt_title)
+
+        if not path:
+            plt.show()
+        else:
+            plt.savefig(f'{path}/{plt_title.replace(":", "-")}.png')
+            plt.close()
+
+
+def plot_coherence(coherence_scores, title="Coherence Scores"):
+    labels = coherence_scores.keys()
+    item1a = [s['item1a'] for s in coherence_scores.values()]
+    item7 = [s['item7'] for s in coherence_scores.values()]
+
+    x = np.arange(len(labels))  # the label locations
+    width = 0.35  # the width of the bars
+
+    fig, ax = plt.subplots()
+    rects1 = ax.bar(x - width / 2, item1a, width, label='Item1a')
+    rects2 = ax.bar(x + width / 2, item7, width, label='Item7')
+
+    # Add some text for labels, title and custom x-axis tick labels, etc.
+    ax.set_ylabel('Coherence Score')
+    ax.set_title(title)
+    ax.set_xticks(x)
+    ax.set_xticklabels(labels, rotation=30)
+    ax.legend()
+
+    # fig.tight_layout()
+
+    plt.show()
