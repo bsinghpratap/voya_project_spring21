@@ -12,6 +12,8 @@ import ast
 from gensim.corpora import Dictionary
 from gensim.models.ldamulticore import LdaMulticore
 import pickle
+from gensim.matutils import corpus2csc
+from gensim.models import TfidfModel
 
 def join_filings_metrics(input_folder, output_file):
     data_by_year = {}
@@ -60,12 +62,124 @@ def join_filings_metrics(input_folder, output_file):
     del result
 
 
+def baseline(input_file, output_file, start, end, is_pickled):
+    valid_year = end + 1
+    test_year =  end + 2
+
+    print("Reading {}".format(input_file))
+    if is_pickled:
+        data = pd.read_pickle(input_file)
+    else:
+        data = pd.read_csv(input_file)
+    data.sort_values(["year_x", "sector"], axis=0, inplace=True)
+    data_train =  data[(data.year_x >= start) & (data.year_x <= end)].copy()
+    data_test = data[(data.year_x == valid_year) | (data.year_x == test_year)].copy()
+
+    for label in ["item1a_risk", "item7_mda"]:
+        train_docs = data_train[label].to_list()
+        test_docs = data_test[label].to_list()
+
+        dictionary = Dictionary(train_docs)
+        dictionary.filter_extremes(no_below=10)
+
+        train_corpus = [dictionary.doc2bow(doc) for doc in train_docs]
+        test_corpus = [dictionary.doc2bow(doc) for doc in test_docs]
+
+        with open(output_file + "baseline_dict_train_" + str(start) + "_" + str(end) + ".pkl", 'wb') as file:
+            pickle.dump(dictionary, file)
+
+        print("Saving train corpus")
+        with open(output_file + "baseline_corpus_train_" +  str(start) + "_" + str(end) + ".pkl", 'wb') as file:
+            pickle.dump(train_corpus, file)
+
+        print("Saving test corpus")
+        with open(output_file + "baseline_corpus_test_" +  str(valid_year) + "_" + str(test_year) + ".pkl", 'wb') as file:
+            pickle.dump(test_corpus, file)
+
+        dict_terms = len(dictionary.keys())
+        train_size = len(train_docs)
+        test_size = len(test_docs)
+
+        """ Frequency based features """
+        # Train
+        train_freq_features = pd.DataFrame(corpus2dense(train_corpus, num_terms=dict_terms, num_docs=train_size).T).reset_index(drop=True)
+        train_freq_features.columns = ["freq_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in train_freq_features.columns]
+        # Test
+        test_freq_features = pd.DataFrame(corpus2dense(test_corpus, num_terms=dict_terms, num_docs=test_size).T).reset_index(drop=True)
+        test_freq_features.columns = ["freq_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in test_freq_features.columns]
+
+        """ TFIDF features """
+        tfidf = TfidfModel(train_corpus)
+        # Train
+        train_tfidf_features = [feature for feature in tfidf[train_corpus]]
+        train_tfidf_features = pd.DataFrame(corpus2dense(train_tfidf_features, num_terms=dict_terms, num_docs=train_size).T).reset_index(drop=True)
+        train_tfidf_features.columns = ["tfidf_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in train_tfidf_features.columns]
+        # Test
+        test_tfidf_features = [feature for feature in tfidf[test_corpus]]
+        test_tfidf_features = pd.DataFrame(corpus2dense(test_tfidf_features, num_terms=dict_terms, num_docs=test_size).T).reset_index(drop=True)
+        test_tfidf_features.columns = ["tfidf_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in test_tfidf_features.columns]
+
+        data_train = data_train.merge(train_freq_features, left_index=True, right_index=True).merge(train_tfidf_features, left_index=True, right_index=True)
+        data_test = data_test.merge(test_freq_features, left_index=True, right_index=True).merge(test_tfidf_features, left_index=True, right_index=True)
+
+
+    train_postfix = "_".join(["train", str(start), str(end)]) + ".pkl"
+    test_postfix = "_".join(["test", str(valid_year), str(test_year)]) + ".pkl"
+    data_train.to_pickle(output_file + train_postfix, protocol=0)
+    data_test.to_pickle(output_file + test_postfix, protocol=0)
+
+
+def sentence_lda_features(input_folder, output_folder, start, end, ws, is_pickled):
+    train_range = list(range(start_year,end_year+1))
+    valid_year = end + 1
+    predict_year = end + 1
+
+    def parse_weights(weights_arr, num_topics):
+        result = np.zeros((30,1))
+        if isinstance(weights_arr[0], list): # we have more than 1 set of weights
+            for sentence_grp in weights_arr:
+                top_topics = heapq.nlargest(num_topics, sentence_grp, key=lambda x: x[1])
+                for (idx_topic, weight) in top_topics:
+                    result[idx_topic] += weight
+        else:
+            """
+            Just a single set of weights -> Use it! Edge case for very short docs.
+            If we were to only use top x and normalize,
+            then it would seem like these documents strongly related to a topic
+            -> This isn't actually hit ever I dont think
+            """ 
+            print("Single")
+            result = np.array([topic_weight[1] for topic_weight in weights_arr], dtype=np.float64)[:,None] # grab only the weight
+        return result / np.linalg.norm(result, ord=1) # Normalize before returning
+
+
+    if ws == 1:
+        #Yes, it is slower to use heapify for a single max element - easier implementation tho
+        num_topics = 1
+    elif ws == 5:
+        num_topics = 2
+    elif ws == 7:
+        num_topics = 3
+
+    risk_postfix = "_".join(["item1a_risk",str(ws),str(start),str(end)])
+    mda_postfix = "_".join(["item7_mda",str(ws),str(start),str(end)])
+
+    lda_risk_path = input_file + "sen_lda_" + risk_postfix + ".model"
+    lda_mda_path = input_file + "sen_lda_" + mda_postfix + ".model"
+    lda_risk = LdaModel.load(lda_risk_path)
+    lda_mda = LdaModel.load(lda_mda_path)
+
+
+
+
+
 def sentence_lda(input_file, output_file, start, end, ws, is_pickled, label):
     print("Reading {}".format(input_file))
     if is_pickled:
         data = pd.read_pickle(input_file)
     else:
         data = pd.read_csv(input_file)
+    data.sort_values(["year_x", "sector"], axis=0, inplace=True)
     data_slice =  data[(data.year_x >= start) & (data.year_x <= end)]
     params = {
         "random_state":10,
@@ -93,20 +207,25 @@ def sentence_lda(input_file, output_file, start, end, ws, is_pickled, label):
     id2word = dictionary.id2token
 
     print("Saving dictionary")
-    with open(output_file + "sen_dict_" + label + "_" + str(ws), 'wb') as file:
+    run_specific_postfix = "_".join([label,str(ws),str(start),str(end)])
+    with open(output_file + "sen_dict_" + run_specific_postfix + ".pkl", 'wb') as file:
         pickle.dump(dictionary, file)
 
+    print("Saving documents")
+    with open(output_file + "sen_docs_" + run_specific_postfix + ".pkl", 'wb') as file:
+        pickle.dump(documents, file)
+
+    print("Saving corpus")
+    with open(output_file + "sen_corpus_" + run_specific_postfix + ".pkl", 'wb') as file:
+        pickle.dump(corpus, file)
+
+
     print("Running LDA")
-    lda = LdaMulticore(corpus=corpus, id2word=id2word, workers=8,**params)
+    lda = LdaMulticore(corpus=corpus, id2word=id2word, workers=-1,**params)
 
     print("Saving LDA")
-    lda.save(output_file + "sen_lda_" + label + "_" + str(ws) + ".model")
-    del documents
-    del dictionary
-    del corpus
-    del _temp
-    del id2word
-    del lda
+    lda.save(output_file + "sen_lda_" + run_specific_postfix + ".model")
+
 
 def split_period(txt, window_size, window_overlap):
     sentences = txt.split(".")
@@ -146,6 +265,7 @@ Preprocesses merged 10-k and metrics
 """
 def preprocess_data(input_file, output_file, process_type, window_size=1, window_overlap=1):
     data = pd.read_csv(input_file)
+    data.sort_values(["year_x", "sector"], axis=0, inplace=True)
 
     # Useful for preprocessing
     nltk.download("stopwords")
@@ -159,6 +279,14 @@ def preprocess_data(input_file, output_file, process_type, window_size=1, window
 
     if process_type == "vanilla_lda":
         """ remove punc, tokenize on spaces, remove stopwords and short words, lemmatizer """
+        for label in ["item1a_risk", "item7_mda"]:
+            print("Preprocessing " + label)
+            # Lowercasen, remove punctuation, tokenize on spaces
+            data[label] = data[label].apply(lambda txt: tokenizer.tokenize(remove_punc(txt.lower())))
+
+            # Lemmatize and remove stopwords
+            data[label] = data[label].apply(lambda doc: [lemmatizer.lemmatize(word) for word in doc if (is_valid_word(lemmatizer.lemmatize(word)) and is_valid_word(word))])
+
     elif process_type == "sentence_lda":
         for label in ["item1a_risk", "item7_mda"]:
             print("Preprocessing " + label)
@@ -173,15 +301,15 @@ def preprocess_data(input_file, output_file, process_type, window_size=1, window
             data[label] = data[label].apply(lambda documents: [[lemmatizer.lemmatize(word) for word in doc if is_valid_word(word)] for doc in documents])
     else:
         print("ERROR! invalid process_type")
-    print("Writing to csv")    
-    data.to_csv(output_file)
+    print("Writing to csv")
+    data.to_pickle(output_file, protocol=0)
     print("Write finished")
         
 
 
     
 import argparse
-JOB_TYPES = ["preprocess_data", "join_filings_metrics", "sentence_lda"]
+JOB_TYPES = ["preprocess_data", "join_filings_metrics", "sentence_lda", "baseline"]
 PREPROCESS_TYPES = ["vanilla_lda", "sentence_lda"]
 VALID_LABELS = ["item1a_risk", "item7_mda"]
 
@@ -223,5 +351,13 @@ elif args.job_type == "sentence_lda":
         print("No label chosen")
         quit()
     sentence_lda(args.input, args.output_file, args.start_year, args.end_year, args.window_size, args.pickled, args.label)
+elif args.job_type == "baseline":
+    if args.start_year == None or args.end_year == None:
+        print("start/end not correctly set")
+        quit()
+    baseline(args.input, args.output_file, args.start_year, args.end_year, args.pickled)
+elif args.job_type == "sentence_lda_features":
+
+
 else:
     print("JobType Error")
