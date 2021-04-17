@@ -359,8 +359,7 @@ elif args.job_type == "baseline":
         quit()
     baseline(args.input, args.output_file, args.start_year, args.end_year, args.pickled)
 elif args.job_type == "sentence_lda_features":
-
-
+    print("lda features")
 else:
     print("JobType Error")
 
