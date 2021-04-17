@@ -18,4 +18,4 @@ START=2013
 END=2016
 LABEL="item1a_risk"
 cd $SCRIPT_DIR
-python3 Preprocessing.py --job_type $JOB_TYPE --input $INPUT --output_file $OUTPUT --window_size $WS --start_year $START --end_year $END --label $LABEL --pickled
+python3 Processing.py --job_type $JOB_TYPE --input $INPUT --output_file $OUTPUT --window_size $WS --start_year $START --end_year $END --label $LABEL --pickled
