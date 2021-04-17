@@ -1,8 +1,8 @@
 #!/bin/bash
 #
 #SBATCH --job-name=VOYA_harshul_ws1
-#SBATCH --output=/mnt/nfs/scratch1/hshukla/sentence_results/window1_rerun/output_%j.txt
-#SBATCH -e /mnt/nfs/scratch1/hshukla/sentence_results/window1_rerun/error_%j.txt
+#SBATCH --output=/mnt/nfs/scratch1/hshukla/final_results/output_%j.txt
+#SBATCH -e /mnt/nfs/scratch1/hshukla/final_results/error_%j.txt
 #SBATCH --partition=1080ti-long
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
