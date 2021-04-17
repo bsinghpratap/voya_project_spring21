@@ -15,6 +15,7 @@ import pickle
 from gensim.matutils import corpus2csc
 from gensim.models import TfidfModel
 
+
 def join_filings_metrics(input_folder, output_file):
     data_by_year = {}
     relevant_cols = ["cik", "ticker", "filing_date", "item1a_risk", "item7_mda"]
@@ -268,9 +269,10 @@ def preprocess_data(input_file, output_file, process_type, window_size=1, window
     data.sort_values(["year_x", "sector"], axis=0, inplace=True)
 
     # Useful for preprocessing
+    EXTRA_STOPWORDS = ["the","thing","there","our","any","while","10k","this","day","for","date","item","use"]
     nltk.download("stopwords")
     nltk.download("wordnet")
-    stopwords_total = set(list(STOPWORDS) + stopwords.words('english'))
+    stopwords_total = set(list(STOPWORDS) + stopwords.words('english') + EXTRA_STOPWORDS)
     lemmatizer = WordNetLemmatizer()
     tokenizer = RegexpTokenizer(r'\w+')
 
@@ -361,3 +363,4 @@ elif args.job_type == "sentence_lda_features":
 
 else:
     print("JobType Error")
+
