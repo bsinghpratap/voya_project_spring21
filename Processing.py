@@ -76,6 +76,9 @@ def baseline(input_file, output_file, start, end, is_pickled):
     data_train =  data[(data.year_x >= start) & (data.year_x <= end)].copy()
     data_test = data[(data.year_x == valid_year) | (data.year_x == test_year)].copy()
 
+    print("Num data_train = {}".format(len(data_train)))
+    print("Num data_test = {}".format(len(data_test)))
+
     for label in ["item1a_risk", "item7_mda"]:
         train_docs = data_train[label].to_list()
         test_docs = data_test[label].to_list()
@@ -88,15 +91,16 @@ def baseline(input_file, output_file, start, end, is_pickled):
         train_corpus = [dictionary.doc2bow(doc) for doc in train_docs]
         test_corpus = [dictionary.doc2bow(doc) for doc in test_docs]
 
-        with open(output_file + "baseline_dict_train_" + str(start) + "_" + str(end) + ".pkl", 'wb') as file:
+        print("Saving train dictionary")
+        with open(output_file + "baseline_dict_train_" + "_".join(label,str(start),str(end)) + ".pkl", 'wb') as file:
             pickle.dump(dictionary, file)
 
         print("Saving train corpus")
-        with open(output_file + "baseline_corpus_train_" +  str(start) + "_" + str(end) + ".pkl", 'wb') as file:
+        with open(output_file + "baseline_corpus_train_" +  "_".join(label,str(start),str(end)) + ".pkl", 'wb') as file:
             pickle.dump(train_corpus, file)
 
         print("Saving test corpus")
-        with open(output_file + "baseline_corpus_test_" +  str(valid_year) + "_" + str(test_year) + ".pkl", 'wb') as file:
+        with open(output_file + "baseline_corpus_test_" +  "_".join(label,str(start),str(end)) + ".pkl", 'wb') as file:
             pickle.dump(test_corpus, file)
 
         dict_terms = len(dictionary.keys())
@@ -171,8 +175,6 @@ def sentence_lda_features(input_folder, output_folder, start, end, ws, is_pickle
     lda_mda_path = input_file + "sen_lda_" + mda_postfix + ".model"
     lda_risk = LdaModel.load(lda_risk_path)
     lda_mda = LdaModel.load(lda_mda_path)
-
-
 
 
 
