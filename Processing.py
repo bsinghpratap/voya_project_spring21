@@ -12,7 +12,7 @@ import ast
 from gensim.corpora import Dictionary
 from gensim.models.ldamulticore import LdaMulticore
 import pickle
-from gensim.matutils import corpus2csc
+from gensim.matutils import corpus2csc, corpus2dense
 from gensim.models import TfidfModel
 
 
@@ -82,6 +82,8 @@ def baseline(input_file, output_file, start, end, is_pickled):
 
         dictionary = Dictionary(train_docs)
         dictionary.filter_extremes(no_below=10)
+        _temp = dictionary[0]
+        id2word = dictionary.id2token
 
         train_corpus = [dictionary.doc2bow(doc) for doc in train_docs]
         test_corpus = [dictionary.doc2bow(doc) for doc in test_docs]
@@ -104,28 +106,28 @@ def baseline(input_file, output_file, start, end, is_pickled):
         """ Frequency based features """
         # Train
         train_freq_features = pd.DataFrame(corpus2dense(train_corpus, num_terms=dict_terms, num_docs=train_size).T).reset_index(drop=True)
-        train_freq_features.columns = ["freq_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in train_freq_features.columns]
+        train_freq_features.columns = ["freq_" + label + "_" + str(id2word.get(int(col))) for col in train_freq_features.columns]
         # Test
         test_freq_features = pd.DataFrame(corpus2dense(test_corpus, num_terms=dict_terms, num_docs=test_size).T).reset_index(drop=True)
-        test_freq_features.columns = ["freq_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in test_freq_features.columns]
+        test_freq_features.columns = ["freq_" + label + "_" + str(id2word.get(int(col))) for col in test_freq_features.columns]
 
         """ TFIDF features """
         tfidf = TfidfModel(train_corpus)
         # Train
         train_tfidf_features = [feature for feature in tfidf[train_corpus]]
         train_tfidf_features = pd.DataFrame(corpus2dense(train_tfidf_features, num_terms=dict_terms, num_docs=train_size).T).reset_index(drop=True)
-        train_tfidf_features.columns = ["tfidf_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in train_tfidf_features.columns]
+        train_tfidf_features.columns = ["tfidf_" + label + "_" + str(id2word.get(int(col))) for col in train_tfidf_features.columns]
         # Test
         test_tfidf_features = [feature for feature in tfidf[test_corpus]]
         test_tfidf_features = pd.DataFrame(corpus2dense(test_tfidf_features, num_terms=dict_terms, num_docs=test_size).T).reset_index(drop=True)
-        test_tfidf_features.columns = ["tfidf_" + label + "_" + str(dictionary.id2token.get(int(col))) for col in test_tfidf_features.columns]
+        test_tfidf_features.columns = ["tfidf_" + label + "_" + str(id2word.get(int(col))) for col in test_tfidf_features.columns]
 
         data_train = data_train.merge(train_freq_features, left_index=True, right_index=True).merge(train_tfidf_features, left_index=True, right_index=True)
         data_test = data_test.merge(test_freq_features, left_index=True, right_index=True).merge(test_tfidf_features, left_index=True, right_index=True)
 
 
-    train_postfix = "_".join(["train", str(start), str(end)]) + ".pkl"
-    test_postfix = "_".join(["test", str(valid_year), str(test_year)]) + ".pkl"
+    train_postfix = "_".join(["baseline","train", str(start), str(end)]) + ".pkl"
+    test_postfix = "_".join(["baseline","test", str(valid_year), str(test_year)]) + ".pkl"
     data_train.to_pickle(output_file + train_postfix, protocol=0)
     data_test.to_pickle(output_file + test_postfix, protocol=0)
 
