@@ -222,7 +222,7 @@ def sentence_lda(input_file, output_file, start, end, ws, is_pickled, label):
 
 
     print("Running LDA")
-    lda = LdaMulticore(corpus=corpus, id2word=id2word, workers=-1,**params)
+    lda = LdaMulticore(corpus=corpus, id2word=id2word, workers=4,**params)
 
     print("Saving LDA")
     lda.save(output_file + "sen_lda_" + run_specific_postfix + ".model")
