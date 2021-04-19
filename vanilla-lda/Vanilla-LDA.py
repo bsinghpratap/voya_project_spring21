@@ -31,7 +31,7 @@ TEST_RUN = False
 WORKERS = 8
 
 
-YEARS = (2012, 2015)
+YEARS = (2013, 2016)
 # YEARS = (2016, 2016)
 data = load_gensim_data(YEARS)
 
@@ -84,7 +84,7 @@ if __name__ == '__main__':
     models = dict()
 
     # for sector in data:
-    for sector in ['all']:
+    for sector in SECTORS:
         models[sector] = dict()
         for item in data[sector]:
 

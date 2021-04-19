@@ -128,7 +128,7 @@ def process(docs,
         if not return_dictionary:
             return corpus, id2word
         else:
-            return dictionary
+            return corpus, id2word, dictionary
     else:
         return corpus[0]
 
@@ -156,7 +156,9 @@ def process_sector(data_slice, sector, item, selected_years, sentence, dictionar
     print('Processing sector: ', sector)
     if len(data_slice) > 1 and 'Unavailable' not in str(sector):
         obj = process(data_slice, sentence=sentence, return_dictionary=dictionary)
-        write(obj, selected_years, name=sector + '_' + item, dictionary=dictionary)
+        write(obj[:2], selected_years, name=sector + '_' + item, dictionary=False)
+        if dictionary:
+            write(obj[2], selected_years, name=sector + '_' + item, dictionary=True)
     else:  # Sector unavailable
         print(f"Skipping sector {sector} with {len(data_slice)} document(s)")
     print('Finished processing:', item, sector)
@@ -173,7 +175,7 @@ if __name__ == '__main__':
         'end': 2020,
         'sectors': False,
         'sentence': False,
-        'dictionary': False
+        'dictionary': True
     }
 
     for opt, val in opts:

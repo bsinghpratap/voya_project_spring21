@@ -71,7 +71,7 @@ def save_models(models, years, path=os.getenv('VOYA_PATH_MODELS')):
         models[sector][item] = model
     """
     path_full = f'{path}{str(years[0])}-{str(years[-1])}/'
-    file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}.gnsm'
+    file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}_{}.gnsm'
 
     if not os.path.exists(path_full):
         os.makedirs(path_full)
@@ -79,7 +79,7 @@ def save_models(models, years, path=os.getenv('VOYA_PATH_MODELS')):
     for sector in models:
         for item in models[sector]:
             model = models[sector][item]
-            file_path_full = path_full + file_name.format(sector, item)
+            file_path_full = path_full + file_name.format(sector, item, model.num_topics)
             model.save(file_path_full)
 
 
