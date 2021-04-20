@@ -204,7 +204,6 @@ def create_weights(data, lda_risk, lda_mda, risk_corpus, mda_corpus, ws):
 
 
 def sentence_lda_features(input_file, output_folder, start, end, ws, is_pickled):
-    train_range = list(range(start_year,end_year+1))
     valid_year = end + 1
     test_year = end + 2
 
@@ -460,7 +459,7 @@ elif args.job_type == "sentence_lda_features":
     if args.window_size == None:
         print("No window size declared")
         quit()
-    sentence_lda_features(args.input, args.output_file, args.start_year, args.end_year, args.window_size, args.is_pickled):
+    sentence_lda_features(args.input, args.output_file, args.start_year, args.end_year, args.window_size, args.pickled)
 else:
     print("JobType Error")
 
