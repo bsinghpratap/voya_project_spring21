@@ -406,7 +406,7 @@ def preprocess_data(input_file, output_file, process_type, window_size=1, window
 
     
 import argparse
-JOB_TYPES = ["preprocess_data", "join_filings_metrics", "sentence_lda", "baseline"]
+JOB_TYPES = ["preprocess_data", "join_filings_metrics", "sentence_lda", "baseline", "sentence_lda_features"]
 PREPROCESS_TYPES = ["vanilla_lda", "sentence_lda"]
 VALID_LABELS = ["item1a_risk", "item7_mda"]
 
@@ -454,7 +454,13 @@ elif args.job_type == "baseline":
         quit()
     baseline(args.input, args.output_file, args.start_year, args.end_year, args.pickled)
 elif args.job_type == "sentence_lda_features":
-    print("lda features")
+    if args.start_year == None or args.end_year == None:
+        print("start/end not correctly set")
+        quit()
+    if args.window_size == None:
+        print("No window size declared")
+        quit()
+    sentence_lda_features(args.input, args.output_file, args.start_year, args.end_year, args.window_size, args.is_pickled):
 else:
     print("JobType Error")
 
