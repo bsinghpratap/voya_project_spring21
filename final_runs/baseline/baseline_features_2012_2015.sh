@@ -6,7 +6,7 @@
 #SBATCH --partition=1080ti-long
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
-#SBATCH --mem=50GB
+#SBATCH --mem=100GB
 #SBATCH --ntasks-per-node=4
 
 JOB_TYPE='baseline'

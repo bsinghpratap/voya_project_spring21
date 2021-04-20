@@ -62,7 +62,6 @@ def join_filings_metrics(input_folder, output_file):
     del predictions
     del result
 
-
 def baseline(input_file, output_file, start, end, is_pickled):
     valid_year = end + 1
     test_year =  end + 2
@@ -73,8 +72,9 @@ def baseline(input_file, output_file, start, end, is_pickled):
     else:
         data = pd.read_csv(input_file)
     data.sort_values(["year_x", "sector"], axis=0, inplace=True)
-    data_train =  data[(data.year_x >= start) & (data.year_x <= end)].copy()
-    data_test = data[(data.year_x == valid_year) | (data.year_x == test_year)].copy()
+    data_train =  data[(data.year_x >= start) & (data.year_x <= end)].copy(deep=True).reset_index(drop=True)
+    data_test = data[(data.year_x == valid_year) | (data.year_x == test_year)].copy(deep=True).reset_index(drop=True)
+    del data
 
     print("Num data_train = {}".format(len(data_train)))
     print("Num data_test = {}".format(len(data_test)))
@@ -92,20 +92,24 @@ def baseline(input_file, output_file, start, end, is_pickled):
         test_corpus = [dictionary.doc2bow(doc) for doc in test_docs]
 
         print("Saving train dictionary")
-        with open(output_file + "baseline_dict_train_" + "_".join(label,str(start),str(end)) + ".pkl", 'wb') as file:
+        with open(output_file + "baseline_dict_train_" + "_".join([label,str(start),str(end)]) + ".pkl", 'wb') as file:
             pickle.dump(dictionary, file)
 
         print("Saving train corpus")
-        with open(output_file + "baseline_corpus_train_" +  "_".join(label,str(start),str(end)) + ".pkl", 'wb') as file:
+        with open(output_file + "baseline_corpus_train_" +  "_".join([label,str(start),str(end)]) + ".pkl", 'wb') as file:
             pickle.dump(train_corpus, file)
 
         print("Saving test corpus")
-        with open(output_file + "baseline_corpus_test_" +  "_".join(label,str(start),str(end)) + ".pkl", 'wb') as file:
+        with open(output_file + "baseline_corpus_test_" +  "_".join([label,str(start),str(end)]) + ".pkl", 'wb') as file:
             pickle.dump(test_corpus, file)
 
         dict_terms = len(dictionary.keys())
         train_size = len(train_docs)
         test_size = len(test_docs)
+
+        print("Len dict_terms {}".format(dict_terms))
+        print("Len train_size {}".format(train_size))
+        print("Len test_size {}".format(test_size))
 
         """ Frequency based features """
         # Train
@@ -114,6 +118,9 @@ def baseline(input_file, output_file, start, end, is_pickled):
         # Test
         test_freq_features = pd.DataFrame(corpus2dense(test_corpus, num_terms=dict_terms, num_docs=test_size).T).reset_index(drop=True)
         test_freq_features.columns = ["freq_" + label + "_" + str(id2word.get(int(col))) for col in test_freq_features.columns]
+
+        print("Shape of train_freq_features: {}".format(str(train_freq_features.shape)))
+        print("Shape of test_freq_features: {}".format(str(test_freq_features.shape)))
 
         """ TFIDF features """
         tfidf = TfidfModel(train_corpus)
@@ -126,8 +133,16 @@ def baseline(input_file, output_file, start, end, is_pickled):
         test_tfidf_features = pd.DataFrame(corpus2dense(test_tfidf_features, num_terms=dict_terms, num_docs=test_size).T).reset_index(drop=True)
         test_tfidf_features.columns = ["tfidf_" + label + "_" + str(id2word.get(int(col))) for col in test_tfidf_features.columns]
 
-        data_train = data_train.merge(train_freq_features, left_index=True, right_index=True).merge(train_tfidf_features, left_index=True, right_index=True)
-        data_test = data_test.merge(test_freq_features, left_index=True, right_index=True).merge(test_tfidf_features, left_index=True, right_index=True)
+        print("Shape of train_tfidf_features: {}".format(str(train_tfidf_features.shape)))
+        print("Shape of test_tfidf_features: {}".format(str(test_tfidf_features.shape)))
+        print("Data_train shape pre-merge: {}".format(data_train.shape))
+        print("Data_test shape pre-merge: {}".format(data_test.shape))
+        
+        data_train = pd.concat([data_train, train_freq_features, train_tfidf_features], axis=1)
+        data_test = pd.concat([data_test, test_freq_features, test_tfidf_features], axis=1)       
+        print("Data_train shape post-merge: {}".format(data_train.shape))
+        print("Data_test shape post-merge: {}".format(data_test.shape))
+        print()
 
 
     train_postfix = "_".join(["baseline","train", str(start), str(end)]) + ".pkl"
@@ -136,45 +151,121 @@ def baseline(input_file, output_file, start, end, is_pickled):
     data_test.to_pickle(output_file + test_postfix, protocol=0)
 
 
-def sentence_lda_features(input_folder, output_folder, start, end, ws, is_pickled):
-    train_range = list(range(start_year,end_year+1))
-    valid_year = end + 1
-    predict_year = end + 1
-
-    def parse_weights(weights_arr, num_topics):
-        result = np.zeros((30,1))
-        if isinstance(weights_arr[0], list): # we have more than 1 set of weights
-            for sentence_grp in weights_arr:
-                top_topics = heapq.nlargest(num_topics, sentence_grp, key=lambda x: x[1])
-                for (idx_topic, weight) in top_topics:
-                    result[idx_topic] += weight
-        else:
-            """
-            Just a single set of weights -> Use it! Edge case for very short docs.
-            If we were to only use top x and normalize,
-            then it would seem like these documents strongly related to a topic
-            -> This isn't actually hit ever I dont think
-            """ 
-            print("Single")
-            result = np.array([topic_weight[1] for topic_weight in weights_arr], dtype=np.float64)[:,None] # grab only the weight
-        return result / np.linalg.norm(result, ord=1) # Normalize before returning
 
 
+def parse_weights(weights_arr, num_topics):
+    result = np.zeros((30,1))
+    if isinstance(weights_arr[0], list): # we have more than 1 set of weights
+        for sentence_grp in weights_arr:
+            top_topics = heapq.nlargest(num_topics, sentence_grp, key=lambda x: x[1])
+            for (idx_topic, weight) in top_topics:
+                result[idx_topic] += weight
+    else:
+        """
+        Just a single set of weights -> Use it! Edge case for very short docs.
+        If we were to only use top x and normalize,
+        then it would seem like these documents strongly related to a topic
+        -> This isn't actually hit ever I dont think
+        """ 
+        print("Single")
+        result = np.array([topic_weight[1] for topic_weight in weights_arr], dtype=np.float64)[:,None] # grab only the weight
+    return result / np.linalg.norm(result, ord=1) # Normalize before returning
+
+def create_weights(data, lda_risk, lda_mda, risk_corpus, mda_corpus, ws):
     if ws == 1:
-        #Yes, it is slower to use heapify for a single max element - easier implementation tho
         num_topics = 1
     elif ws == 5:
         num_topics = 2
     elif ws == 7:
         num_topics = 3
 
+    idx_risk = 0
+    idx_mda = 0
+    document_weights = np.zeros((len(data), 60))
+    for idx_slice in range(len(data)):
+        row = data.iloc[idx_slice]
+
+        n_risk = len(row["item1a_risk"])
+        n_mda = len(row["item7_mda"])
+
+        row_risk_results = [item for item in lda_risk[risk_corpus[idx_risk:idx_risk+n_risk]]]
+        row_mda_results = [item for item in lda_mda[mda_corpus[idx_mda:idx_mda+n_mda]]]
+
+        weights_risk = parse_weights(row_risk_results, num_topics)
+        weights_mda = parse_weights(row_mda_results, num_topics)
+        weights = np.concatenate((weights_risk, weights_mda), axis=0)
+
+        documents_weights[idx_slice,:] = weights.squeeze()
+
+        idx_risk += n_risk
+        idx_mda += n_mda
+
+    return document_weights
+
+
+def sentence_lda_features(input_file, output_folder, start, end, ws, is_pickled):
+    train_range = list(range(start_year,end_year+1))
+    valid_year = end + 1
+    test_year = end + 2
+
+    print("Reading {}".format(input_file))
+    if is_pickled:
+        data = pd.read_pickle(input_file)
+    else:
+        data = pd.read_csv(input_file)
+    data.sort_values(["year_x", "sector"], axis=0, inplace=True)
+    data_train =  data[(data.year_x >= start) & (data.year_x <= end)].copy(deep=True).reset_index(drop=True)
+    data_test = data[(data.year_x == valid_year) | (data.year_x == test_year)].copy(deep=True).reset_index(drop=True)
+    del data
+
+
+    print("Loading dictionary")
     risk_postfix = "_".join(["item1a_risk",str(ws),str(start),str(end)])
     mda_postfix = "_".join(["item7_mda",str(ws),str(start),str(end)])
 
-    lda_risk_path = input_file + "sen_lda_" + risk_postfix + ".model"
-    lda_mda_path = input_file + "sen_lda_" + mda_postfix + ".model"
-    lda_risk = LdaModel.load(lda_risk_path)
-    lda_mda = LdaModel.load(lda_mda_path)
+    # LDAs
+    lda_risk = LdaModel.load(output_folder + "sen_lda_" + risk_postfix + ".model")
+    lda_mda = LdaModel.load(loutput_folder + "sen_lda_" + mda_postfix + ".model")
+
+    # Dicts
+    with open(output_folder + "sen_dict_" + risk_postfix + ".pkl", 'rb') as file:
+        train_risk_dict = pickle.load(file)
+    with open(output_folder + "sen_dict_" + mda_postfix + ".pkl", 'rb') as file:
+        train_mda_dict = pickle.load(file)
+
+    # Train corpus
+    with open(output_folder + "sen_corpus_" + risk_postfix + ".pkl", 'rb') as file:
+        train_risk_corpus = pickle.load(file)
+    with open(output_folder + "sen_corpus_" + mda_postfix + ".pkl", 'rb') as file:
+        train_mda_corpus = pickle.load(file)
+
+    # Create valid/test corpus
+    test_valid_risk_corpus = [train_risk_dict.doc2bow(doc) for doc in data_test["item1a_risk"].to_list()]
+    test_valid_mda_corpus = [train_mda_dict.doc2bow(doc) for doc in data_test["item7_mda"].to_list()]
+
+    print("Saving Test/Validcorpus")
+    with open(output_file + "sen_corpus_test_valid_" + risk_postfix + ".pkl", 'wb') as file:
+        pickle.dump(test_valid_risk_corpus, file)
+    with open(output_file + "sen_corpus_test_valid_" + mda_postfix + ".pkl", 'wb') as file:
+        pickle.dump(test_valid_mda_corpus, file)
+
+
+    # Find train weights
+    train_documents_weights = create_weights(data_train, lda_risk, lda_mda, train_risk_corpus, train_mda_corpus, ws)
+    test_valid_documents_weights = create_weights(data_test, lda_risk, lda_mda, test_valid_risk_corpus, test_valid_mda_corpus, ws)
+
+    # Append weights to train or valid/test
+    feature_columns = ["risk_topic_" + str(i) for i in range(30)] + ["mda_topic_" + str(i) for i in range(30)]
+    train_documents_weights = pd.DataFrame(data=train_documents_weights, columns=feature_columns)
+    test_valid_documents_weights = pd.DataFrame(data=test_valid_documents_weights, columns=feature_columns)
+
+    data_train = pd.concat([data_train, train_documents_weights], axis=1)
+    data_test = pd.concat([data_test, test_valid_documents_weights], axis=1)
+
+    # Write to disk
+    run_specific_postfix = "_".join([str(ws),str(start),str(end)])
+    data_train.to_pickle("data_train_" + run_specific_postfix + ".pkl", protocol=0)
+    data_test.to_pickle("data_test_valid_" + run_specific_postfix + ".pkl", protocol=0)
 
 
 
