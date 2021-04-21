@@ -9,7 +9,10 @@ from nltk.stem.wordnet import WordNetLemmatizer
 from nltk.tokenize import RegexpTokenizer
 import pandas as pd
 import ast
+import heapq
+
 from gensim.corpora import Dictionary
+from gensim.models.ldamodel import LdaModel
 from gensim.models.ldamulticore import LdaMulticore
 import pickle
 from gensim.matutils import corpus2csc, corpus2dense
@@ -181,7 +184,7 @@ def create_weights(data, lda_risk, lda_mda, risk_corpus, mda_corpus, ws):
 
     idx_risk = 0
     idx_mda = 0
-    document_weights = np.zeros((len(data), 60))
+    documents_weights = np.zeros((len(data), 60))
     for idx_slice in range(len(data)):
         row = data.iloc[idx_slice]
 
@@ -200,7 +203,7 @@ def create_weights(data, lda_risk, lda_mda, risk_corpus, mda_corpus, ws):
         idx_risk += n_risk
         idx_mda += n_mda
 
-    return document_weights
+    return documents_weights
 
 
 def sentence_lda_features(input_file, output_folder, start, end, ws, is_pickled):
@@ -224,7 +227,7 @@ def sentence_lda_features(input_file, output_folder, start, end, ws, is_pickled)
 
     # LDAs
     lda_risk = LdaModel.load(output_folder + "sen_lda_" + risk_postfix + ".model")
-    lda_mda = LdaModel.load(loutput_folder + "sen_lda_" + mda_postfix + ".model")
+    lda_mda = LdaModel.load(output_folder + "sen_lda_" + mda_postfix + ".model")
 
     # Dicts
     with open(output_folder + "sen_dict_" + risk_postfix + ".pkl", 'rb') as file:
@@ -239,13 +242,13 @@ def sentence_lda_features(input_file, output_folder, start, end, ws, is_pickled)
         train_mda_corpus = pickle.load(file)
 
     # Create valid/test corpus
-    test_valid_risk_corpus = [train_risk_dict.doc2bow(doc) for doc in data_test["item1a_risk"].to_list()]
-    test_valid_mda_corpus = [train_mda_dict.doc2bow(doc) for doc in data_test["item7_mda"].to_list()]
+    test_valid_risk_corpus = [train_risk_dict.doc2bow(sentence_grp) for doc in data_test["item1a_risk"].to_list() for sentence_grp in doc]
+    test_valid_mda_corpus = [train_mda_dict.doc2bow(sentence_grp) for doc in data_test["item7_mda"].to_list() for sentence_grp in doc]
 
     print("Saving Test/Validcorpus")
-    with open(output_file + "sen_corpus_test_valid_" + risk_postfix + ".pkl", 'wb') as file:
+    with open(output_folder + "sen_corpus_test_valid_" + risk_postfix + ".pkl", 'wb') as file:
         pickle.dump(test_valid_risk_corpus, file)
-    with open(output_file + "sen_corpus_test_valid_" + mda_postfix + ".pkl", 'wb') as file:
+    with open(output_folder + "sen_corpus_test_valid_" + mda_postfix + ".pkl", 'wb') as file:
         pickle.dump(test_valid_mda_corpus, file)
 
 
@@ -262,9 +265,10 @@ def sentence_lda_features(input_file, output_folder, start, end, ws, is_pickled)
     data_test = pd.concat([data_test, test_valid_documents_weights], axis=1)
 
     # Write to disk
-    run_specific_postfix = "_".join([str(ws),str(start),str(end)])
-    data_train.to_pickle("data_train_" + run_specific_postfix + ".pkl", protocol=0)
-    data_test.to_pickle("data_test_valid_" + run_specific_postfix + ".pkl", protocol=0)
+    train_postfix = "_".join([str(ws),str(start),str(end)])
+    test_postfix = "_".join([str(ws),str(valid_year),str(test_year)])
+    data_train.to_pickle(output_folder + "data_train_" + train_postfix + ".pkl", protocol=0)
+    data_test.to_pickle(output_folder + "data_test_valid_" + test_postfix + ".pkl", protocol=0)
 
 
 
