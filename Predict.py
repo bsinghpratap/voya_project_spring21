@@ -10,256 +10,231 @@ from matplotlib import pyplot as plt
 from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix, accuracy_score
 import joblib
 import argparse
+import pickle
+from collections import Counter
+
+
+RANDOM_STATE = 5
+
+# JOB_TYPES = ["lda", "freq", "tfidf"]
+# TARGET_VARIABLES = ["is_dps_cut", "d_environmental"]
+
+
+def print_metrics_classif(y_real, y_predicted):
+    accuracy = accuracy_score(y_real, y_predicted)
+    precision = precision_score(y_real, y_predicted)
+    recall = recall_score(y_real, y_predicted)
+    f1 = f1_score(y_real, y_predicted)
+    coh_kap_score = cohen_kappa_score(y_real, y_predicted)
+    print("Accuracy: {:.4f}".format(accuracy))
+    print("Precision: {:.4f}".format(precision))
+    print("Recall: {:.4f}".format(recall))
+    print("F1-score: {:.4f}".format(f1))
+    print("Cohen-Kappa: {:.4f}".format(coh_kap_score))
+    print(classification_report(y_real, y_predicted, target_names=["no_cut", "yes_cut"]))
+    
+    cm = confusion_matrix(y_real, y_predicted)
+    cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+    print(cm.diagonal())
+    
+def train_and_validate_classification(x_vals_train, y_vals_train, x_vals_valid, y_vals_valid, max_depth, samp_strat=None, class_weight=None):
+    if class_weight:
+        rf = RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=-1, max_depth=max_depth, class_weight=class_weight)
+    elif samp_strat:
+        rf = RandomForestClassifier(random_state=RANDOM_STATE, n_jobs=-1, max_depth=max_depth)
+        smote = SMOTE(sampling_strategy=samp_strat, random_state=RANDOM_STATE)
+        x_vals_train, y_vals_train = smote.fit_resample(x_vals_train, y_vals_train)
+    
+    # Fit the model
+    rf.fit(X=x_vals_train, y=y_vals_train)
+
+    # Prediction metrics
+    y_vals_valid_predicted = rf.predict(x_vals_valid)
+    coh_kap_score = cohen_kappa_score(y_vals_valid, y_vals_valid_predicted)
+    return coh_kap_score, (rf, depth, samp_strat, class_weight)
+    
+    
+def print_metrics_reg(y_real, y_predicted):
+    r2 = r2_score(y_real, y_predicted)
+    mape = mean_absolute_percentage_error(y_real, y_predicted)
+    mse = mean_squared_error(y_real, y_predicted)
+    mae = mean_absolute_error(y_real, y_predicted)
+    print("R2: {:.4f}".format(r2))
+    print("mape: {:.4f}".format(mape))
+    print("mse: {:.4f}".format(mse))
+    print("mae: {:.4f}".format(mae))
+    
+def train_and_validate_regression(x_vals_train, y_vals_train, x_vals_valid, y_vals_valid, max_depth, criteria):
+    print("Max_Depth: {}".format(max_depth))
+    print("Criteria: {}".format(criteria))
+    rf = RandomForestRegressor(random_state=RANDOM_STATE, n_jobs=-1, max_depth=max_depth, criterion=criteria)
+    
+    # Fit the model
+    rf.fit(X=x_vals_train, y=y_vals_train)
+    
+    y_predicted = rf.predict(x_vals_valid)
+    r2 = r2_score(y_vals_valid, y_predicted)
+    return r2, (rf, depth, criteria)
 
 
 # Parsing
 parser = argparse.ArgumentParser()
-JOB_TYPES = ["vanilla_lda", "sentence_lda"]
+JOB_TYPES = ["lda", "freq", "tfidf"]
+TARGET_VARIABLES = ["is_dps_cut", "d_environmental"]
 
 # Required or binary
-parser.add_argument("--job_type", required=True, choices=JOB_TYPES, help="Type of prediction job")
-parser.add_argument("--lda_risk", required=True, help="Path to LDA model for item1a_risk")
-parser.add_argument("--lda_mda",  required=True, help="Path to LDA model for item7_mda")
-parser.add_argument("--input_file",  required=True, help=".csv or .pkl where the data is stored for all years")
-parser.add_argument("--output_folder",  required=True, help="Folder to output model, results, and predictions")
-parser.add_argument("-sy", "--start_year", type = int, required=True, help="Inclusive start range")
-parser.add_argument("-ey", "--end_year", type = int, required=True, help="Inclusive end range")
-parser.add_argument("-py", "--predict_year", type = int, required=True, help="Year to predict (usually end_year + 1)")
+parser.add_argument("--job_type", required=True, choices=JOB_TYPES, help="Feature type of prediction job")
+parser.add_argument("--target", required=True, choices=TARGET_VARIABLES, help="Column name of prediction job")
+parser.add_argument("--input_folder", required=True)
+parser.add_argument("--output_folder",  required=True)
 
 # Optional
 parser.add_argument("-ws", "--window_size", type = int, required=False, help="For ppt sentence_lda, number of sentences in a document")
 
-# Binary flags
-parser.add_argument("--pickled", action='store_true', help="Use if input_file is .pkl instead of .csv")
-parser.add_argument("--corpus_filter", action='store_true', help="Use if the input corpus needs to be filtered")
 args = parser.parse_args()
 print(args)
 
 # Fetch settings
 job_type = args.job_type
-lda_risk_path = args.lda_risk
-lda_mda_path = args.lda_mda
-data_path = args.input_file
+target = args.target
+input_path = args.input_folder
 output_folder = args.output_folder
-is_pkl = args.pickled
-start_year = args.start_year
-end_year = args.end_year
-predict_year = args.predict_year
-train_range = list(range(start_year,end_year+1))
-if args.job_type == "sentence_lda":
+if job_type == "lda":    
     window_size = args.window_size
+    if not window_size:
+        print("Window size not set for LDA. Quitting")
+        quit()
 else:
     window_size = None
-is_vanilla = job_type == "vanilla_lda"
-is_pkl = args.pickled
-is_corp_filter = args.corpus_filter
 
 
 
-# Load data
-print("Loading input data")
-if is_pkl:
-    data = pd.read_pickle(data_path)
-else:
-    data = pd.read_csv(data_path)
-data = data.sort_values(by=['year_x'])
-lda_risk = LdaModel.load(lda_risk_path)
-lda_mda = LdaModel.load(lda_mda_path)
+print(job_type)
+print(target)
+print(window_size)
+print("--------------------------------------------------------------")
 
 
+# Variables
+start_year = 2012
+end_year = 2015
+valid_year = 2016
+test_year = 2017
 
-# Find subset of valid data
-print("Using {} model for [{},{}] inclusive predicting for {}".format(job_type, start_year, end_year, predict_year))
-data["is_dividend_payer"] = data["is_dividend_payer"].astype(bool)
-data_valid = data[data["is_dividend_payer"] & data["is_dps_cut"].notnull()]
-data_valid["is_dps_cut"] = data_valid["is_dps_cut"].astype(int)
+for i in range(0,3):
+    print("Processing {}_{} and {}_{}".format(start_year, end_year, valid_year, test_year))
 
-# train/test
-data_train = data_valid[(data_valid.year_x >= start_year) & (data_valid.year_x <= end_year)]
-data_test = data_valid[data_valid.year_x == predict_year]
-print("# train rows: {}".format(len(data_train)))
-print("# test rows: {}".format(len(data_test)))
-
-
-# The dictionary is defined over the entire training dataset
-if is_vanilla:
-    risk_docs = []
-    mda_docs = []
-else:
-    risk_docs = [sentence_grp for doc in data_train["item1a_risk"].to_list() for sentence_grp in doc]
-    mda_docs = [sentence_grp for doc in data_train["item7_mda"].to_list() for sentence_grp in doc]
-
-risk_dict = Dictionary(risk_docs)
-mda_dict = Dictionary(risk_docs)
-if is_corp_filter: # Used filtering in sent-lda to speed things up
-    risk_dict.filter_extremes(no_below=10)
-    mda_dict.filter_extremes(no_below=10)
-del risk_docs
-del mda_docs
-
-
-
-train_values = data_train["is_dps_cut"].value_counts() / sum(data_train["is_dps_cut"].value_counts())
-test_values = data_test["is_dps_cut"].value_counts() / sum(data_test["is_dps_cut"].value_counts())
-class_weight = {0: 1.0 / train_values[0], 1: 1.0 / train_values[1]}
-print("Train class membership = (0,{:.3f}) and (1,{:.3f})".format(train_values[0], train_values[1]))
-print("Test class membership = (0,{:.3f}) and (1,{:.3f})".format(test_values[0], test_values[1]))
-print("Using class weights:")
-print(class_weight)
-
-
-rf = RandomForestClassifier(random_state=5, warm_start=False, n_jobs=-1, verbose=1, class_weight=class_weight)
-
-
-
-"""
-window = 1: Only one topics
-window = 5: Two topics
-window = 7: Three topics
-"""
-if window_size == 1:
-    #Yes, it is slower to use heapify for a single max element - easier implementation tho
-    num_topics = 1
-elif window_size == 5:
-    num_topics = 2
-elif window_size == 7:
-    num_topics = 3
-else:
-    print("ERROR")
-print("Num topics per sentence: {}".format(num_topics))
-
-
-def parse_weights(weights_arr, num_topics):
-    result = np.zeros((30,1))
-    if isinstance(weights_arr[0], list): # we have more than 1 set of weights
-        for sentence_grp in weights_arr:
-            top_topics = heapq.nlargest(num_topics, sentence_grp, key=lambda x: x[1])
-            for (idx_topic, weight) in top_topics:
-                result[idx_topic] += weight
+    # Infer input file names
+    if job_type == "lda":
+        train_path = input_path + "_".join(["data", "train",str(ws),str(start_year),str(end_year)]) + ".pkl"
+        test_path = input_path + "_".join(["data","test","valid",str(ws),str(valid_year),str(test_year)]) + ".pkl"
     else:
-        """
-        Just a single set of weights -> Use it! Edge case for very short docs.
-        If we were to only use top x and normalize,
-        then it would seem like these documents strongly related to a topic
-        -> This isn't actually hit ever I dont think
-        """ 
-        print("Single")
-        result = np.array([topic_weight[1] for topic_weight in weights_arr], dtype=np.float64)[:,None] # grab only the weight
-    return result / np.linalg.norm(result, ord=1) # Normalize before returning
+        train_path = input_path + "_".join(["baseline", "train",str(start_year),str(end_year)]) + ".pkl"
+        train_path = input_path + "_".join(["baseline", "test",str(valid_year),str(test_year)]) + ".pkl"
+
+    # Load data
+    data_train = pd.read_pickle(train_path)
+    data_test_valid = pd.read_pickle(test_path)
+
+    # Reduce data based on target
+    if target == "is_dps_cut":
+        # Train
+        data_train["is_dividend_payer"] = data_train["is_dividend_payer"].astype(bool)
+        data_train = data_train[data_train["is_dividend_payer"] & data_train["is_dps_cut"].notnull()]
+        data_train["is_dps_cut"] = data_train["is_dps_cut"].astype(int)
+
+        # Test/Valid
+        data_test_valid["is_dividend_payer"] = data_test_valid["is_dividend_payer"].astype(bool)
+        data_test_valid = data_test_valid[data_test_valid["is_dividend_payer"] & data_test_valid["is_dps_cut"].notnull()]
+        data_test_valid["is_dps_cut"] = data_test_valid["is_dps_cut"].astype(int)
+    elif target == "d_environmental":
+        # Train
+        data_train = data_train[data_train["d_environmental"].notna()]
+
+        # Test/Valid
+        data_test_valid = data_test_valid[data_test_valid["d_environmental"].notna()]
+    else:
+        print("ERROR! invaid target")
+        quit()
+
+    # Split valid and test
+    data_valid = data_test_valid[data_test_valid.year_x == valid_year]
+    data_test = data_test_valid[data_test_valid.year_x == test_year]
+
+    # Different training weights depending on job_type
+    if job_type == "lda":
+        train_weights = data_train.loc[:,"risk_topic_0":].to_numpy().tolist()
+        valid_weights = data_test.loc[:,"risk_topic_0":].to_numpy().tolist()
+        test_weights = data_test.loc[:,"risk_topic_0":].to_numpy().tolist()
+    else:
+        if job_type == "freq":
+            feature_regex = "freq*"
+        elif job_type == "tfidf":
+            feature_regex = "tfidf*"
+        train_weights = data_train.filter(regex=feature_regex).to_numpy().tolist()
+        valid_weights = data_valid.filter(regex=feature_regex).to_numpy().tolist()
+        test_weights = data_test.filter(regex=feature_regex).to_numpy().tolist()
+        
 
 
-# In[11]:
+    # Labels always the same
+    train_labels = data_train.loc[:,target].to_list()
+    valid_labels = data_valid.loc[:,target].to_list()
+    test_labels = data_test.loc[:,target].to_list()
+
+    best_run_score = 0
+    best_run_params = None
+    depths = [3,5,7]
+    if target == "is_dps_cut":   # Classification
+        # Class weights for imbalanced data
+        counter = Counter(train_labels)
+        total = float(sum(list(counter.values())))
+        class_weights = {0: total/float(counter.get(0)), 1: total/float(counter.get(1))}
+
+        sample_strategies = [.1,.3,.5,.7,1]
+        best_run_score = 0
+
+        # Try with SMOTE and just classweights
+        for depth in depths:
+            score, params  = train_and_validate_classification(train_weights, train_labels, valid_weights, valid_labels, depth, class_weight=class_weights)
+            if score > best_run_score:
+                best_run_score = score
+                best_run_params = params
+            for samp_strat in sample_strategies:
+                score, params = train_and_validate_classification(train_weights, train_labels, valid_weights, valid_labels, depth, samp_strat=samp_strat)
+                if score > best_run_score:
+                    best_run_score = score
+                    best_run_params = params
+        rf = best_run_params[0]
+
+        # Report validation and testing scores
+        print("Best validation score: {:.4f}, Params: ({}, {}, {})".format(best_run_score, best_run_params[1], best_run_params[2], best_run_params[3]))
+        print_metrics_classif(test_labels, rf.predict(test_weights))
+    else:   # Regression
+        criteria = ["mse", "mae"]
+        for depth in depths:
+            for crit in criteria:
+                score, params = train_and_validate_regression(train_weights, train_labels, valid_weights, valid_labels, depth, crit)
+                if score > best_run_score:
+                    best_run_score = score
+                    best_run_params = params
+
+        rf = best_run_params[0]
+        print("Best validation score: {:.4f}, Params: ({}, {})".format(best_run_score, best_run_params[1], best_run_params[2]))
+        print_metrics_reg(test_labels, rf.predict(test_weights))
 
 
-print("For training we have {} documents".format(len(data_train)))
 
-risk_docs = [sentence_grp for doc in data_train["item1a_risk"].to_list() for sentence_grp in doc]
-risk_corpus = [risk_dict.doc2bow(doc) for doc in risk_docs]
-del risk_docs
+    # Write RandomForest to disk
+    output_rf_path = output_folder + "rf_"
+    if job_type == "lda":
+        output_rf_path += "_".join([job_type, target, window_size, start_year, end_year, valid_year, test_year])
+    else:
+        output_rf_path += "_".join([job_type, target, start_year, end_year, valid_year, test_year])
+    output_rf_path += ".joblib"
+    joblib.dump(rf, output_rf_path)
 
-mda_docs = [sentence_grp for doc in data_train["item7_mda"].to_list() for sentence_grp in doc]
-mda_corpus = [mda_dict.doc2bow(doc) for doc in mda_docs]
-del mda_docs
-
-
-documents_weights = np.zeros((len(data_train), 60))
-idx_risk = 0
-idx_mda = 0
-for idx_slice in range(len(data_train)):
-    row = data_train.iloc[idx_slice]
-    n_risk = len(row["item1a_risk"])
-    n_mda = len(row["item7_mda"])
-
-    row_risk_results = [item for item in lda_risk[risk_corpus[idx_risk:idx_risk+n_risk]]]
-    row_mda_results = [item for item in lda_mda[mda_corpus[idx_mda:idx_mda+n_mda]]]
-
-    weights_risk = parse_weights(row_risk_results, num_topics)
-    weights_mda = parse_weights(row_mda_results, num_topics)
-    weights = np.concatenate((weights_risk, weights_mda), axis=0)
-
-    documents_weights[idx_slice,:] = weights.squeeze()
-
-    idx_risk += n_risk
-    idx_mda += n_mda
-
-
-# In[ ]:
-
-
-rf.fit(X=documents_weights,y=data_train["is_dps_cut"].to_list())
-
-
-# In[12]:
-
-
-print("For testing we have {} documents".format(len(data_test)))
-test_risk_docs = [sentence_grp for doc in data_test["item1a_risk"].to_list() for sentence_grp in doc]
-test_risk_corpus = [risk_dict.doc2bow(doc) for doc in test_risk_docs]
-
-test_mda_docs = [sentence_grp for doc in data_test["item7_mda"].to_list() for sentence_grp in doc]
-test_mda_corpus = [mda_dict.doc2bow(doc) for doc in test_mda_docs]
-
-del test_risk_docs
-del test_mda_docs
-
-
-# In[13]:
-
-
-# Find testing features
-test_documents_weights = np.zeros((len(data_test), 60))
-idx_risk = 0
-idx_mda = 0
-for idx_slice in range(len(data_test)):
-    row = data_test.iloc[idx_slice]
-    n_risk = len(row["item1a_risk"])
-    n_mda = len(row["item7_mda"])
-    
-    row_risk_results = [item for item in lda_risk[test_risk_corpus[idx_risk:idx_risk+n_risk]]]
-    row_mda_results = [item for item in lda_mda[test_mda_corpus[idx_mda:idx_mda+n_mda]]]
-    
-    weights_risk = parse_weights(row_risk_results, num_topics)
-    weights_mda = parse_weights(row_mda_results, num_topics)
-    weights = np.concatenate((weights_risk, weights_mda), axis=0)
-    
-    test_documents_weights[idx_slice,:] = weights.squeeze()
-    
-    idx_risk += n_risk
-    idx_mda += n_mda
-
-y_pred = rf.predict(test_documents_weights)
-y_actual = data_test["is_dps_cut"].to_list()
-
-
-accuracy = accuracy_score(y_actual, y_pred)
-precision = precision_score(y_actual, y_pred)
-recall = recall_score(y_actual, y_pred)
-f1 = f1_score(y_actual, y_pred)
-print("Accuracy: {:.4f}".format(accuracy))
-print("Precision: {:.4f}".format(precision))
-print("Recall: {:.4f}".format(recall))
-print("F1-score: {:.4f}".format(f1))
-
-
-feature_columns = ["risk_topic_" + str(i) for i in range(30)] + ["mda_topic_" + str(i) for i in range(30)]
-
-# Copy and add training features
-training_data = data_train.copy().reset_index()
-training_features = pd.DataFrame(data=documents_weights, columns=feature_columns)
-training_data_output = pd.concat([training_data, training_features], axis=1)
-
-# Copy and add predictions + training features
-testing_data = data_test.copy().reset_index()
-testing_data["dps_cut_prediction"] = y_pred
-testing_features =  pd.DataFrame(data=test_documents_weights, columns=feature_columns)
-testing_data_output = pd.concat([testing_data, testing_features], axis=1)
-
-# Write to disk
-print("Writing to disk")
-print("Writing training")
-training_data_output.to_csv(output_folder + "training_{}_{}_{}_{}.csv".format(start_year, end_year, predict_year, window_size))
-print("Writing testing")
-testing_data_output.to_csv(output_folder + "testing_{}_{}_{}_{}.csv".format(start_year, end_year, predict_year, window_size))
-print("Writing forest")
-joblib.dump(rf, output_folder + 'rf_sentencelda_{}_{}_{}_{}.pkl'.format(start_year, end_year, predict_year, window_size))
-
+    start_year += 1
+    end_year += 1
+    valid_year += 1
+    test_year += 1
