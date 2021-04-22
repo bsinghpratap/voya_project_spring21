@@ -1,6 +1,6 @@
 JOB_TYPE='lda'
 TARGET='is_dps_cut'
-WINDOW_SIZE=1
+WINDOW_SIZE=7
 SCRIPT_DIR='/mnt/nfs/work1/696ds-s21/hshukla/voya_project_spring21/'
 INPUT='/mnt/nfs/scratch1/hshukla/final_results/'
 OUTPUT='/mnt/nfs/scratch1/hshukla/final_predictions/'

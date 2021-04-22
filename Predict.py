@@ -1,18 +1,17 @@
 #!/usr/bin/env python
 # coding: utf-8
 import pandas as pd
-from gensim.corpora import Dictionary
-from gensim.models.ldamodel import LdaModel
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 import numpy as np
-import heapq
 from matplotlib import pyplot as plt
-from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix, accuracy_score
+from sklearn.metrics import precision_score, recall_score, f1_score, confusion_matrix, accuracy_score, classification_report, cohen_kappa_score
+from sklearn.metrics import r2_score,  mean_absolute_percentage_error,  mean_squared_error,  mean_absolute_error
 import joblib
 import argparse
 import pickle
 from collections import Counter
-
+import imblearn
+from imblearn.over_sampling import SMOTE
 
 RANDOM_STATE = 5
 
@@ -126,11 +125,11 @@ for i in range(0,3):
 
     # Infer input file names
     if job_type == "lda":
-        train_path = input_path + "_".join(["data", "train",str(ws),str(start_year),str(end_year)]) + ".pkl"
-        test_path = input_path + "_".join(["data","test","valid",str(ws),str(valid_year),str(test_year)]) + ".pkl"
+        train_path = input_path + "_".join(["data", "train",str(window_size),str(start_year),str(end_year)]) + ".pkl"
+        test_path = input_path + "_".join(["data","test","valid",str(window_size),str(valid_year),str(test_year)]) + ".pkl"
     else:
         train_path = input_path + "_".join(["baseline", "train",str(start_year),str(end_year)]) + ".pkl"
-        train_path = input_path + "_".join(["baseline", "test",str(valid_year),str(test_year)]) + ".pkl"
+        test_path = input_path + "_".join(["baseline", "test",str(valid_year),str(test_year)]) + ".pkl"
 
     # Load data
     data_train = pd.read_pickle(train_path)
@@ -164,7 +163,7 @@ for i in range(0,3):
     # Different training weights depending on job_type
     if job_type == "lda":
         train_weights = data_train.loc[:,"risk_topic_0":].to_numpy().tolist()
-        valid_weights = data_test.loc[:,"risk_topic_0":].to_numpy().tolist()
+        valid_weights = data_valid.loc[:,"risk_topic_0":].to_numpy().tolist()
         test_weights = data_test.loc[:,"risk_topic_0":].to_numpy().tolist()
     else:
         if job_type == "freq":
@@ -228,9 +227,9 @@ for i in range(0,3):
     # Write RandomForest to disk
     output_rf_path = output_folder + "rf_"
     if job_type == "lda":
-        output_rf_path += "_".join([job_type, target, window_size, start_year, end_year, valid_year, test_year])
+        output_rf_path += "_".join([job_type, target, str(window_size), str(start_year), str(end_year), str(valid_year), str(test_year)])
     else:
-        output_rf_path += "_".join([job_type, target, start_year, end_year, valid_year, test_year])
+        output_rf_path += "_".join([job_type, target, str(start_year), str(end_year), str(valid_year), str(test_year)])
     output_rf_path += ".joblib"
     joblib.dump(rf, output_rf_path)
 

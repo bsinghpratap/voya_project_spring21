@@ -466,4 +466,3 @@ elif args.job_type == "sentence_lda_features":
     sentence_lda_features(args.input, args.output_file, args.start_year, args.end_year, args.window_size, args.pickled)
 else:
     print("JobType Error")
-

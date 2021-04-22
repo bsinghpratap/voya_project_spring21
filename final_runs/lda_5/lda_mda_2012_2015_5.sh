@@ -8,7 +8,6 @@
 #SBATCH --ntasks=1
 #SBATCH --mem=300GB
 #SBATCH --ntasks-per-node=8
-
 JOB_TYPE='sentence_lda'
 SCRIPT_DIR='/mnt/nfs/work1/696ds-s21/hshukla/voya_project_spring21/'
 INPUT='/mnt/nfs/scratch1/hshukla/final_results/data_sen_5_2.pkl'
