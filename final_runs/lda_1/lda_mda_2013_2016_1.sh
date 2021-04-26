@@ -6,7 +6,7 @@
 #SBATCH --partition=1080ti-long
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
-#SBATCH --mem=300GB
+#SBATCH --mem=350GB
 #SBATCH --ntasks-per-node=8
 
 JOB_TYPE='sentence_lda'

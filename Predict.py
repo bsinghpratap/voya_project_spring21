@@ -12,6 +12,8 @@ import pickle
 from collections import Counter
 import imblearn
 from imblearn.over_sampling import SMOTE
+from sklearn.linear_model import Lasso, Ridge, ElasticNet
+
 
 RANDOM_STATE = 5
 
@@ -62,7 +64,20 @@ def print_metrics_reg(y_real, y_predicted):
     print("mape: {:.4f}".format(mape))
     print("mse: {:.4f}".format(mse))
     print("mae: {:.4f}".format(mae))
+
+def train_and_validate_linear_regression(x_vals_train, y_vals_train, x_vals_valid, y_vals_valid, reg_type, alph):
+    if reg_type == "ridge":
+         reg = Ridge(alpha=alph, random_state=RANDOM_STATE)
+    elif reg_type == "lasso":
+         reg = Lasso(alpha=alph, random_state=RANDOM_STATE)
+    else:
+         reg = ElasticNet(alpha=alph, random_state=RANDOM_STATE)
+    reg.fit(x_vals_train,y_vals_train)
     
+    y_predicted = reg.predict(x_vals_valid)
+    r2 = r2_score(y_vals_valid, y_predicted)
+    return r2, (reg, reg_type, str(alph))
+
 def train_and_validate_regression(x_vals_train, y_vals_train, x_vals_valid, y_vals_valid, max_depth, criteria):
     print("Max_Depth: {}".format(max_depth))
     print("Criteria: {}".format(criteria))
@@ -181,7 +196,7 @@ for i in range(0,3):
     valid_labels = data_valid.loc[:,target].to_list()
     test_labels = data_test.loc[:,target].to_list()
 
-    best_run_score = 0
+    best_run_score = -1
     best_run_params = None
     depths = [3,5,7]
     if target == "is_dps_cut":   # Classification
@@ -210,13 +225,23 @@ for i in range(0,3):
         print("Best validation score: {:.4f}, Params: ({}, {}, {})".format(best_run_score, best_run_params[1], best_run_params[2], best_run_params[3]))
         print_metrics_classif(test_labels, rf.predict(test_weights))
     else:   # Regression
-        criteria = ["mse", "mae"]
-        for depth in depths:
-            for crit in criteria:
-                score, params = train_and_validate_regression(train_weights, train_labels, valid_weights, valid_labels, depth, crit)
-                if score > best_run_score:
-                    best_run_score = score
-                    best_run_params = params
+        #criteria = ["mse", "mae"]
+        #for depth in depths:
+        #    for crit in criteria:
+        #        score, params = train_and_validate_regression(train_weights, train_labels, valid_weights, valid_labels, depth, crit)
+        #        if score > best_run_score:
+        #            best_run_score = score
+        #            best_run_params = params
+        
+        model_types = ["lasso", "ridge", "elasticnet"]
+        alphas = [.1, .25, .5, .75, .9, 1.0]
+        for model in model_types:
+             for alpha in alphas:
+                  score, params = train_and_validate_linear_regression(train_weights, train_labels, valid_weights, valid_labels, model, alpha)
+                  if score > best_run_score:
+                       best_run_score = score
+                       best_run_params = params
+
 
         rf = best_run_params[0]
         print("Best validation score: {:.4f}, Params: ({}, {})".format(best_run_score, best_run_params[1], best_run_params[2]))

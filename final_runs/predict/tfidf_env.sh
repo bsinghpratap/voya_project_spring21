@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 #SBATCH --job-name=VOYA_harshul_ws1
-#SBATCH --output=/mnt/nfs/scratch1/hshukla/final_predictions/output_%j.txt
+#SBATCH --output=/mnt/nfs/scratch1/hshukla/final_predictions/tfidf_env_%j.txt
 #SBATCH -e /mnt/nfs/scratch1/hshukla/final_predictions/error_%j.txt
 #SBATCH --partition=1080ti-long
 #SBATCH --gres=gpu:1

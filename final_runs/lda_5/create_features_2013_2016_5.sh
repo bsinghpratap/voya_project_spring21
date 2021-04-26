@@ -6,16 +6,15 @@
 #SBATCH --partition=1080ti-long
 #SBATCH --gres=gpu:1
 #SBATCH --ntasks=1
-#SBATCH --mem=350GB
+#SBATCH --mem=150GB
 #SBATCH --ntasks-per-node=8
 
-JOB_TYPE='sentence_lda'
+JOB_TYPE='sentence_lda_features'
 SCRIPT_DIR='/mnt/nfs/work1/696ds-s21/hshukla/voya_project_spring21/'
-INPUT='/mnt/nfs/scratch1/hshukla/final_results/data_sen_1_1.pkl'
+INPUT='/mnt/nfs/scratch1/hshukla/final_results/data_sen_5_2.pkl'
 OUTPUT='/mnt/nfs/scratch1/hshukla/final_results/'
-WS=1
-START=2012
-END=2015
-LABEL="item7_mda"
+WS=5
+START=2013
+END=2016
 cd $SCRIPT_DIR
-python3 Processing.py --job_type $JOB_TYPE --input $INPUT --output_file $OUTPUT --window_size $WS --start_year $START --end_year $END --label $LABEL --pickled
+python3 Processing.py --job_type $JOB_TYPE --input $INPUT --output_file $OUTPUT --window_size $WS --start_year $START --end_year $END --pickled
