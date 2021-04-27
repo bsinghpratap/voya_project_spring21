@@ -175,25 +175,40 @@ for i in range(0,3):
     data_valid = data_test_valid[data_test_valid.year_x == valid_year]
     data_test = data_test_valid[data_test_valid.year_x == test_year]
 
+    # Add information about sectors. Re-index because all sectors might not be present in one of the them (feature mismatch)
+    SECTORS = ["tech", "financials", "consumer", "industrials", "health care", "commodities", "real estate", "utilities", "unavailable"]
+    train_sectors = pd.get_dummies(data_train.sector.str.lower(), prefix="sector", prefix_sep="_").T.reindex(SECTORS).T.fillna(0)
+    valid_sectors = pd.get_dummies(data_valid.sector.str.lower(), prefix="sector", prefix_sep="_").T.reindex(SECTORS).T.fillna(0)
+    test_sectors = pd.get_dummies(data_test.sector.str.lower(),   prefix="sector", prefix_sep="_").T.reindex(SECTORS).T.fillna(0)
+
     # Different training weights depending on job_type
     if job_type == "lda":
-        train_weights = data_train.loc[:,"risk_topic_0":].to_numpy().tolist()
-        valid_weights = data_valid.loc[:,"risk_topic_0":].to_numpy().tolist()
-        test_weights = data_test.loc[:,"risk_topic_0":].to_numpy().tolist()
+        train_weights = pd.concat([data_train, train_sectors], axis=1).loc[:,"risk_topic_0":]
+        valid_weights = pd.concat([data_valid, valid_sectors], axis=1).loc[:,"risk_topic_0":]
+        test_weights = pd.concat([data_test, test_sectors], axis=1).loc[:,"risk_topic_0":]
     else:
         if job_type == "freq":
             feature_regex = "freq*"
         elif job_type == "tfidf":
             feature_regex = "tfidf*"
-        train_weights = data_train.filter(regex=feature_regex).to_numpy().tolist()
-        valid_weights = data_valid.filter(regex=feature_regex).to_numpy().tolist()
-        test_weights = data_test.filter(regex=feature_regex).to_numpy().tolist()
-        
+        train_weights = pd.concat([data_train.filter(regex=feature_regex), train_sectors], axis=1)
+        valid_weights = pd.concat([data_valid.filter(regex=feature_regex), valid_sectors], axis=1)
+        test_weights = pd.concat([data_test.filter(regex=feature_regex), test_sectors], axis=1)
+
+    # Create weights for train + validation data
+    train_valid_weights =  pd.concat([train_weights, valid_weights], axis=0, ignore_index=True)
+
+    # To list
+    train_weights = train_weights.to_numpy().tolist()
+    valid_weights = valid_weights.to_numpy().tolist()
+    train_valid_weights = train_valid_weights.to_numpy().tolist()
+    test_weights = test_weights.to_numpy().tolist()
 
 
     # Labels always the same
     train_labels = data_train.loc[:,target].to_list()
     valid_labels = data_valid.loc[:,target].to_list()
+    train_valid_labels = train_labels + valid_labels
     test_labels = data_test.loc[:,target].to_list()
 
     best_run_score = -1
@@ -206,8 +221,6 @@ for i in range(0,3):
         class_weights = {0: total/float(counter.get(0)), 1: total/float(counter.get(1))}
 
         sample_strategies = [.1,.3,.5,.7,1]
-        best_run_score = 0
-
         # Try with SMOTE and just classweights
         for depth in depths:
             score, params  = train_and_validate_classification(train_weights, train_labels, valid_weights, valid_labels, depth, class_weight=class_weights)
@@ -220,6 +233,7 @@ for i in range(0,3):
                     best_run_score = score
                     best_run_params = params
         rf = best_run_params[0]
+        rf.fit(train_valid_weights, train_valid_labels)
 
         # Report validation and testing scores
         print("Best validation score: {:.4f}, Params: ({}, {}, {})".format(best_run_score, best_run_params[1], best_run_params[2], best_run_params[3]))
@@ -244,6 +258,7 @@ for i in range(0,3):
 
 
         rf = best_run_params[0]
+        rf.fit(train_valid_weights, train_valid_labels)
         print("Best validation score: {:.4f}, Params: ({}, {})".format(best_run_score, best_run_params[1], best_run_params[2]))
         print_metrics_reg(test_labels, rf.predict(test_weights))
 
