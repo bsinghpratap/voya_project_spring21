@@ -88,8 +88,8 @@ def load_models(years, model_class, by_sector=False, path=os.getenv('VOYA_PATH_M
     output is a dictionary formatted as follows
         models[sector][item] = model
     """
-    path_full = f'{path}{str(years[0])}-{str(years[-1])}/'
-    file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}.gnsm'
+    path_full = f'{path}{str(years[0])}-{str(years[-1])}\\'
+    file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}' + '_30.gnsm'
 
     sectors = SECTORS if by_sector else ['all']
 

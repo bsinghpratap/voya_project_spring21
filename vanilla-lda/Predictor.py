@@ -1,6 +1,8 @@
+import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+import pickle
 
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.metrics import f1_score, cohen_kappa_score, plot_roc_curve, plot_precision_recall_curve
@@ -20,13 +22,14 @@ from GensimPreprocessor import process
 TARGET_VALUE = "is_dps_cut"
 TARGET_VALUE_TYPE = bool
 
-TEST_RUN = False
+# TODO: Remove
 
 RF_PARAMS = {
     'n_estimators': 30,
     'warm_start': False,
-    'max_depth': 3,
-    'class_weight': 'balanced'
+    'max_depth': 7,
+    'class_weight': 'balanced',
+    'n_jobs': 8
 }
 
 SMOTE_PARAMS = {
@@ -34,37 +37,41 @@ SMOTE_PARAMS = {
     'random_state': 22
 }
 
+TEST_RUN = False
+LOAD_FROM_FILE = False
 GLOBAL_WEIGHTS = True
 GLOBAL_ESTIMATORS = True
-INCLUDE_ALL = True
-APPEND_ALL = False
-PLOT_ROC = False
+INCLUDE_ALL = False
+APPEND_ALL = True
+PLOT_ROC = True
 
 OVERSAMPLE = False
 
 if INCLUDE_ALL and 'all' not in SECTORS:
+    print("Including all sector")
     SECTORS = ['all', *SECTORS]
 
 #%% Get command line arguments
 args = {
     'start': 2012,
     'end': 2015,
-    'predict': 2016
+    'validate': 2016,
+    'predict': 2017
 }
 # get_args(arg_map=args)
-years = list(range(int(args['start']), int(args['end'])+1))
+YEARS = list(range(int(args['start']), int(args['end']) + 1))
 
 #%% Load Dict
-dictionaries = load_gensim_data(years, dictionary=True)
+dictionaries = load_gensim_data(YEARS, dictionary=True)
 #%% Load Data
 data_all, _, _ = load_data(file='processed_data.csv')
-data_all.query('year_x in @years | year_x == @args.get("predict")', inplace=True)
+data_all.query('year_x in @YEARS | year_x == @args.get("predict")', inplace=True)
 #%% Load Trained Models
-models = load_models(years, LdaMulticore, by_sector=True)
-models['all'] = load_models(years, LdaMulticore, by_sector=False)['all']
+models = load_models(YEARS, LdaMulticore, by_sector=True)
+models['all'] = load_models(YEARS, LdaMulticore, by_sector=False)['all']
 
 #%% Find subset of valid data
-print("LDA on [{},{}] predicting for {}".format(years[0], years[-1], args['predict']))
+print("LDA on [{},{}] predicting for {}".format(YEARS[0], YEARS[-1], args['predict']))
 
 if TARGET_VALUE == "is_dps_cut":
 
@@ -78,17 +85,51 @@ elif TARGET_VALUE == "z_environmental":
     data_valid["z_environmental"] = data_valid["z_environmental"].astype(float)
 
 if TEST_RUN:
-    data_valid = data_valid.sample(frac=0.025)
+    print("WARNING: Subsampling data for test purposes")
+    data_valid = data_valid.sample(frac=0.3)
 
 #%% train/test data preparation
-data_train = data_valid[(data_valid.year_x >= years[0]) & (data_valid.year_x <= years[-1])]
+data_train = data_valid[(data_valid.year_x >= YEARS[0]) & (data_valid.year_x <= YEARS[-1])]
+data_validate = data_valid[data_valid.year_x == args['validate']]
 data_test = data_valid[data_valid.year_x == args['predict']]
 print("# train rows: {}".format(len(data_train)))
 print("# test rows: {}".format(len(data_test)))
 
 
+#%% Load Weights from file
+def load_weights_file(sector, item, years, num_topics, all=False):
+    target_path = f"{os.getenv('VOYA_PATH_MODELS')}{YEARS[0]}-{YEARS[-1]}\\weights\\"
+    target_name = f'{years[0]}-{years[-1]}_{sector}_{item}_{num_topics}'
+    if all: target_name += '_all'
+    target_name += '.pkl'
+
+    weights = None
+
+    if not os.path.isdir(target_path):
+        pass
+    elif os.path.isfile(target_path + target_name):
+        print("Loading weights from file", sector, item, years, num_topics, 'all' if all else 'sector')
+        with open(target_path + target_name, mode='rb') as file:
+            weights = pickle.load(file)
+    return weights
+
+
+def save_weights_file(sector, item, years, num_topics, weights, all=False):
+    print("Saving weights to file", sector, item, years, num_topics, 'all' if all else 'sector')
+    target_path = f"{os.getenv('VOYA_PATH_MODELS')}{YEARS[0]}-{YEARS[-1]}\\weights\\"
+    target_name = f'{years[0]}-{years[-1]}_{sector}_{item}_{num_topics}'
+    if all: target_name += '_all'
+    target_name += '.pkl'
+
+    if not os.path.isdir(target_path):
+        os.mkdir(target_path)
+
+    with open(target_path + target_name, mode='wb') as file:
+        pickle.dump(weights, file)
+
+
 #%% Get Weights function
-def get_weights(models, sector, item, corpus_list, global_weights=GLOBAL_WEIGHTS, append_all=APPEND_ALL):
+def get_weights(models, sector, item, corpus_list, years=YEARS, global_weights=GLOBAL_WEIGHTS, append_all=APPEND_ALL):
 
     model = models[sector][item]
 
@@ -103,14 +144,23 @@ def get_weights(models, sector, item, corpus_list, global_weights=GLOBAL_WEIGHTS
         output_shape = (len(corpus_list), model.num_topics)
 
     weights = np.zeros(shape=output_shape)
+    loaded_topics = load_weights_file(sector, item, years, model.num_topics)
+    loaded_topics_all = load_weights_file(sector, item, years, model.num_topics, all=True)
+    write_topics = list()
+    write_topics_all = list()
 
     for idx, corpus in enumerate(corpus_list):
-        try:
+        if loaded_topics is None:
             topics = model.get_document_topics(corpus)
-            if append_all:
+            write_topics.append(topics)
+        else:
+            topics = loaded_topics[idx]
+        if append_all:
+            if loaded_topics_all is None:
                 topics_all = models['all'][item].get_document_topics(corpus)
-        except:
-            print('Got exception with:', idx, corpus)
+                write_topics_all.append(topics_all)
+            else:
+                topics_all = loaded_topics_all[idx]
 
         for topic in topics:
             weights[idx][topic[0]+idx_offset] = topic[1]
@@ -119,11 +169,16 @@ def get_weights(models, sector, item, corpus_list, global_weights=GLOBAL_WEIGHTS
             for topic in topics_all:
                 weights[idx][topic[0]+model.num_topics] = topic[1]
 
+    if len(write_topics) > 0:
+        save_weights_file(sector, item, years, model.num_topics, write_topics)
+    if len(write_topics_all) > 0:
+        save_weights_file(sector, item, years, model.num_topics, write_topics_all, all=True)
+
     return weights
 
 
 #%%
-def get_preds(sector, item, aggregator=None, plot_roc=PLOT_ROC):
+def get_preds(sector, item, years=YEARS, aggregator=None, plot_roc=PLOT_ROC):
     """:returns (predictions, true_values)"""
 
     # Define models
@@ -137,11 +192,11 @@ def get_preds(sector, item, aggregator=None, plot_roc=PLOT_ROC):
     # Get weights for training
     # X_train_docs = data_train[(data_train.year_x in years) & (data_train.sector == sector)]
     if sector != 'all':
-        X_train_docs = data_train.query('year_x in @years & sector == @sector')
+        X_train_docs = data_train.query('year_x in @YEARS & sector == @sector')
     else:
-        X_train_docs = data_train.query('year_x in @years')
+        X_train_docs = data_train.query('year_x in @YEARS')
     X_train_corpus = [process(doc, single_doc=True, dictionary=dictionary, verbose=False) for doc in X_train_docs['item1a_risk']]
-    X_train_weights = get_weights(models, sector, item, X_train_corpus)
+    X_train_weights = get_weights(models, sector, item, X_train_corpus, years=YEARS)
     X_train_target = X_train_docs['is_dps_cut']
 
     # Oversample
@@ -159,7 +214,7 @@ def get_preds(sector, item, aggregator=None, plot_roc=PLOT_ROC):
     else:
         X_test_docs = data_test.query('year_x == @args.get("predict")')
     X_test_corpus = [process(doc, single_doc=True, verbose=False) for doc in X_test_docs['item1a_risk']]
-    X_test_weights = get_weights(models, sector, item, X_test_corpus)
+    X_test_weights = get_weights(models, sector, item, X_test_corpus, years=[args['predict']])
 
     if aggregator:
         return {
@@ -226,11 +281,19 @@ for sector in SECTORS:
                       "\n\tF1:", f1_score(results[1], results[0]),
                       "\n\tCK:", cohen_kappa_score(results[1], results[0])
                 )
+                # if PLOT_ROC:
+                #     plot_precision_recall_curve(
+                #         estimator=estimator,
+                #         X=aggregators['X_test_weights'],
+                #         y=y_true,
+                #         name=f'{TARGET_VALUE} ROC')
+                #     plt.show()
 
 
 #%% Train Global Estimators
 if GLOBAL_ESTIMATORS:
     estimator = RandomForestClassifier(**RF_PARAMS)
+    print("Fitting global estimator")
     estimator.fit(
         aggregators['X_train_weights'],
         aggregators['X_train_target']
@@ -240,6 +303,14 @@ if GLOBAL_ESTIMATORS:
     y_true = aggregators['X_test_target']
     print("\n\tF1:", f1_score(y_true=y_true, y_pred=y_pred))
     print("\n\tCK:", cohen_kappa_score(y_true, y_pred))
+
+    if PLOT_ROC:
+        plot_precision_recall_curve(
+            estimator=estimator,
+            X=aggregators['X_test_weights'],
+            y=y_true,
+            name=f'{TARGET_VALUE} ROC')
+        plt.show()
 
 
 #%% Parse Results

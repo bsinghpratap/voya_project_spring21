@@ -25,17 +25,15 @@ sys.path.append('C:\\Users\\Alan\\Projects School\\696DS\\voya_project_spring21'
 from util import load_data, load_gensim_data, save_models
 from util import SECTORS
 
-
+# SECTORS = ['all', *SECTORS]
 # In[12]:
 TEST_RUN = False
-WORKERS = 8
+WORKERS = 16
 
 
-YEARS = (2013, 2016)
+YEARS = (2017, 2017)
 # YEARS = (2016, 2016)
 data = load_gensim_data(YEARS)
-
-
 
 # In[13]:
 
