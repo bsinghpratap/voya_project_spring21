@@ -17,10 +17,6 @@ from sklearn.linear_model import Lasso, Ridge, ElasticNet
 
 RANDOM_STATE = 5
 
-# JOB_TYPES = ["lda", "freq", "tfidf"]
-# TARGET_VARIABLES = ["is_dps_cut", "d_environmental"]
-
-
 def print_metrics_classif(y_real, y_predicted):
     accuracy = accuracy_score(y_real, y_predicted)
     precision = precision_score(y_real, y_predicted)
@@ -51,8 +47,9 @@ def train_and_validate_classification(x_vals_train, y_vals_train, x_vals_valid, 
 
     # Prediction metrics
     y_vals_valid_predicted = rf.predict(x_vals_valid)
-    coh_kap_score = cohen_kappa_score(y_vals_valid, y_vals_valid_predicted)
-    return coh_kap_score, (rf, depth, samp_strat, class_weight)
+    # coh_kap_score = cohen_kappa_score(y_vals_valid, y_vals_valid_predicted)
+    f1 = f1_score(y_real, y_predicted)
+    return f1, (rf, depth, samp_strat, class_weight)
     
     
 def print_metrics_reg(y_real, y_predicted):
@@ -104,7 +101,7 @@ parser.add_argument("--output_folder",  required=True)
 
 # Optional
 parser.add_argument("-ws", "--window_size", type = int, required=False, help="For ppt sentence_lda, number of sentences in a document")
-
+parser.add_argument('-v', "--variance", action='store_true')
 args = parser.parse_args()
 print(args)
 
@@ -113,6 +110,7 @@ job_type = args.job_type
 target = args.target
 input_path = args.input_folder
 output_folder = args.output_folder
+variance_calculation = args.variance
 if job_type == "lda":    
     window_size = args.window_size
     if not window_size:
@@ -215,29 +213,47 @@ for i in range(0,3):
     best_run_params = None
     depths = [3,5,7]
     if target == "is_dps_cut":   # Classification
-        # Class weights for imbalanced data
-        counter = Counter(train_labels)
-        total = float(sum(list(counter.values())))
-        class_weights = {0: total/float(counter.get(0)), 1: total/float(counter.get(1))}
+        if variance_calculation: # Special case
+            RANDOM_STATE = 5
+            metrics = []
+            for _ in range(100):
+                rf = RandomForestClassifier(random_state=RANDOM_STATE)
+                rf.fit(train_valid_weights, train_valid_labels)
 
-        sample_strategies = [.1,.3,.5,.7,1]
-        # Try with SMOTE and just classweights
-        for depth in depths:
-            score, params  = train_and_validate_classification(train_weights, train_labels, valid_weights, valid_labels, depth, class_weight=class_weights)
-            if score > best_run_score:
-                best_run_score = score
-                best_run_params = params
-            for samp_strat in sample_strategies:
-                score, params = train_and_validate_classification(train_weights, train_labels, valid_weights, valid_labels, depth, samp_strat=samp_strat)
+                y_predicted = rf.predict(test_weights)
+                accuracy = accuracy_score(test_labels, y_predicted)
+                f1 = f1_score(test_labels, y_predicted)
+                coh_kap_score = cohen_kappa_score(test_labels, y_predicted)
+                metrics.append((float(accuracy), float(f1), float(coh_kap_score)))
+                RANDOM_STATE += 1
+
+            variance_df = pd.DataFrame(metrics, columns=["accuracy", "f1", "coh_kap_score"])
+            output_variance_path += "_".join([job_type, target, str(window_size), str(start_year), str(end_year), str(valid_year), str(test_year)])
+            variance_df.to_pickle(output_folder + output_variance_path + ".pkl", protocol=0)
+        else:
+            # Class weights for imbalanced data
+            counter = Counter(train_labels)
+            total = float(sum(list(counter.values())))
+            class_weights = {0: total/float(counter.get(0)), 1: total/float(counter.get(1))}
+
+            sample_strategies = [.1,.3,.5,.7,1]
+            # Try with SMOTE and just classweights
+            for depth in depths:
+                score, params  = train_and_validate_classification(train_weights, train_labels, valid_weights, valid_labels, depth, class_weight=class_weights)
                 if score > best_run_score:
                     best_run_score = score
                     best_run_params = params
-        rf = best_run_params[0]
-        rf.fit(train_valid_weights, train_valid_labels)
+                for samp_strat in sample_strategies:
+                    score, params = train_and_validate_classification(train_weights, train_labels, valid_weights, valid_labels, depth, samp_strat=samp_strat)
+                    if score > best_run_score:
+                        best_run_score = score
+                        best_run_params = params
+            rf = best_run_params[0]
+            rf.fit(train_valid_weights, train_valid_labels)
 
-        # Report validation and testing scores
-        print("Best validation score: {:.4f}, Params: ({}, {}, {})".format(best_run_score, best_run_params[1], best_run_params[2], best_run_params[3]))
-        print_metrics_classif(test_labels, rf.predict(test_weights))
+            # Report validation and testing scores
+            print("Best validation score: {:.4f}, Params: ({}, {}, {})".format(best_run_score, best_run_params[1], best_run_params[2], best_run_params[3]))
+            print_metrics_classif(test_labels, rf.predict(test_weights))
     else:   # Regression
         #criteria = ["mse", "mae"]
         #for depth in depths:
@@ -262,16 +278,15 @@ for i in range(0,3):
         print("Best validation score: {:.4f}, Params: ({}, {})".format(best_run_score, best_run_params[1], best_run_params[2]))
         print_metrics_reg(test_labels, rf.predict(test_weights))
 
-
-
-    # Write RandomForest to disk
-    output_rf_path = output_folder + "rf_"
-    if job_type == "lda":
-        output_rf_path += "_".join([job_type, target, str(window_size), str(start_year), str(end_year), str(valid_year), str(test_year)])
-    else:
-        output_rf_path += "_".join([job_type, target, str(start_year), str(end_year), str(valid_year), str(test_year)])
-    output_rf_path += ".joblib"
-    joblib.dump(rf, output_rf_path)
+    if not variance_calculation:
+        # Write RandomForest to disk
+        output_rf_path = output_folder + "rf_"
+        if job_type == "lda":
+            output_rf_path += "_".join([job_type, target, str(window_size), str(start_year), str(end_year), str(valid_year), str(test_year)])
+        else:
+            output_rf_path += "_".join([job_type, target, str(start_year), str(end_year), str(valid_year), str(test_year)])
+        output_rf_path += ".joblib"
+        joblib.dump(rf, output_rf_path)
 
     start_year += 1
     end_year += 1
