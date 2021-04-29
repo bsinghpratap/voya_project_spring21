@@ -48,7 +48,7 @@ def train_and_validate_classification(x_vals_train, y_vals_train, x_vals_valid, 
     # Prediction metrics
     y_vals_valid_predicted = rf.predict(x_vals_valid)
     # coh_kap_score = cohen_kappa_score(y_vals_valid, y_vals_valid_predicted)
-    f1 = f1_score(y_real, y_predicted)
+    f1 = f1_score(y_vals_valid, y_vals_valid_predicted)
     return f1, (rf, depth, samp_strat, class_weight)
     
     
@@ -144,6 +144,12 @@ for i in range(0,3):
         train_path = input_path + "_".join(["baseline", "train",str(start_year),str(end_year)]) + ".pkl"
         test_path = input_path + "_".join(["baseline", "test",str(valid_year),str(test_year)]) + ".pkl"
 
+
+    if job_type == "lda":
+        run_specific_output_path = "_".join([job_type, target, str(window_size), str(start_year), str(end_year), str(valid_year), str(test_year)])
+    else:
+        run_specific_output_path = "_".join([job_type, target, str(start_year), str(end_year), str(valid_year), str(test_year)])
+
     # Load data
     data_train = pd.read_pickle(train_path)
     data_test_valid = pd.read_pickle(test_path)
@@ -228,8 +234,7 @@ for i in range(0,3):
                 RANDOM_STATE += 1
 
             variance_df = pd.DataFrame(metrics, columns=["accuracy", "f1", "coh_kap_score"])
-            output_variance_path += "_".join([job_type, target, str(window_size), str(start_year), str(end_year), str(valid_year), str(test_year)])
-            variance_df.to_pickle(output_folder + output_variance_path + ".pkl", protocol=0)
+            variance_df.to_pickle(output_folder + "variance_" + run_specific_output_path + ".pkl", protocol=0)
         else:
             # Class weights for imbalanced data
             counter = Counter(train_labels)
@@ -253,7 +258,15 @@ for i in range(0,3):
 
             # Report validation and testing scores
             print("Best validation score: {:.4f}, Params: ({}, {}, {})".format(best_run_score, best_run_params[1], best_run_params[2], best_run_params[3]))
-            print_metrics_classif(test_labels, rf.predict(test_weights))
+            predicted_test_labels = rf.predict(test_weights)
+
+            print("Saving predictions")
+            with open(output_folder + "real_" + run_specific_output_path + ".pkl", 'wb') as file:
+                pickle.dump(test_labels, file)
+            with open(output_folder + "predicted_" + run_specific_output_path + ".pkl", 'wb') as file:
+                pickle.dump(predicted_test_labels, file)
+
+            print_metrics_classif(test_labels, predicted_test_labels)
     else:   # Regression
         #criteria = ["mse", "mae"]
         #for depth in depths:
@@ -279,13 +292,7 @@ for i in range(0,3):
         print_metrics_reg(test_labels, rf.predict(test_weights))
 
     if not variance_calculation:
-        # Write RandomForest to disk
-        output_rf_path = output_folder + "rf_"
-        if job_type == "lda":
-            output_rf_path += "_".join([job_type, target, str(window_size), str(start_year), str(end_year), str(valid_year), str(test_year)])
-        else:
-            output_rf_path += "_".join([job_type, target, str(start_year), str(end_year), str(valid_year), str(test_year)])
-        output_rf_path += ".joblib"
+        output_rf_path = output_folder + "rf_" + run_specific_output_path + ".joblib"
         joblib.dump(rf, output_rf_path)
 
     start_year += 1
