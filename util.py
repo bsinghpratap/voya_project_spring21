@@ -13,6 +13,7 @@ ITEMS = ['item1a', 'item7']
 
 rcParams.update({'figure.autolayout': True})
 
+
 def load_data(path=os.getenv('VOYA_PATH_DATA'), file='processed_data.csv'):
     """Loads data
     returns: Tuple(all_data, X, y)
@@ -88,7 +89,7 @@ def load_models(years, model_class, by_sector=False, path=os.getenv('VOYA_PATH_M
     output is a dictionary formatted as follows
         models[sector][item] = model
     """
-    path_full = f'{path}{str(years[0])}-{str(years[-1])}\\'
+    path_full = f'{path}{str(years[0])}-{str(years[-1])}/'
     file_name = f'{str(years[0])}-{str(years[-1])}' + '_{}_{}' + '_30.gnsm'
 
     sectors = SECTORS if by_sector else ['all']
@@ -174,3 +175,35 @@ def plot_coherence(coherence_scores, title="Coherence Scores"):
     # fig.tight_layout()
 
     plt.show()
+
+
+#%% Load Weights from file # TODO: Change YEARS
+def load_weights_file(sector, item, years, num_topics, all=False, YEARS=None):
+    target_path = f"{os.getenv('VOYA_PATH_MODELS')}{YEARS[0]}-{YEARS[-1]}/weights/"
+    target_name = f'{years[0]}-{years[-1]}_{sector}_{item}_{num_topics}'
+    if all: target_name += '_all'
+    target_name += '.pkl'
+
+    weights = None
+
+    if not os.path.isdir(target_path):
+        pass
+    elif os.path.isfile(target_path + target_name):
+        # print("Loading weights from file", sector, item, years, num_topics, 'all' if all else 'sector')
+        with open(target_path + target_name, mode='rb') as file:
+            weights = pickle.load(file)
+    return weights
+
+
+def save_weights_file(sector, item, years, num_topics, weights, all=False):
+    # print("Saving weights to file", sector, item, years, num_topics, 'all' if all else 'sector')
+    target_path = f"{os.getenv('VOYA_PATH_MODELS')}{YEARS[0]}-{YEARS[-1]}/weights/"
+    target_name = f'{years[0]}-{years[-1]}_{sector}_{item}_{num_topics}'
+    if all: target_name += '_all'
+    target_name += '.pkl'
+
+    if not os.path.isdir(target_path):
+        os.mkdir(target_path)
+
+    with open(target_path + target_name, mode='wb') as file:
+        pickle.dump(weights, file)

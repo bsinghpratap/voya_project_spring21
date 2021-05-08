@@ -9,14 +9,13 @@ import numpy as np
 from nltk.tokenize import RegexpTokenizer
 from nltk.stem.wordnet import WordNetLemmatizer
 from gensim.models.ldamulticore import LdaMulticore
-
+from time import sleep
 from gensim.models import Phrases
 from gensim.parsing.preprocessing import preprocess_string, remove_stopwords, strip_numeric, strip_punctuation, strip_short, stem_text
 import matplotlib.pyplot as plt
 import pickle
 
 from multiprocessing import Pool
-
 
 # In[2]:
 
@@ -41,7 +40,7 @@ import sys, getopt
 import os
 
 FILE_PATH = '../Files/gensim/'
-
+SLEEP_TIME = 100
 # Add bigrams and trigrams
 ADD_BIGRAMS = True
 
@@ -54,7 +53,7 @@ FILTER_NO_BELOW = 20
 
 # In[17]:
 
-from util import load_data
+from util import load_data, SECTORS
 
 
 from gensim.parsing.preprocessing import STOPWORDS
@@ -207,19 +206,21 @@ if __name__ == '__main__':
         'item7': 'item7_mda'
     }
     
-    sectors = pd.unique(data['sector']) if SPLIT_BY_SECTORS else ['all']
+    # sectors = pd.unique(data['sector']) if SPLIT_BY_SECTORS else ['all']
+    sectors = ['all', *SECTORS]
 
     pool = Pool()
     procs = list()
     
     for item in items:
         for sector in sectors:
-            if SPLIT_BY_SECTORS:
-                data_slice = data[(data.sector == sector)][items[item]]
-            else:
+            if sector == 'all':
                 data_slice = data[items[item]]
+            else:
+                data_slice = data[(data.sector == sector)][items[item]]
             call_args = (data_slice, sector, item, SELECTED_YEARS, SENTENCE, DICTIONARY)
             procs.append(pool.apply_async(process_sector, call_args))
+            sleep(SLEEP_TIME)
         # else:
         #     corpus, id2word = process(data[items[item]], sentence=SENTENCE)
         #     write(corpus, id2word, SELECTED_YEARS, name='all_'+item)

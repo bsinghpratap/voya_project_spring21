@@ -5,7 +5,7 @@ from gensim.models.ldamulticore import LdaMulticore
 from util import load_models, load_gensim_data, ITEMS
 
 #%% Params
-YEARS = (2012, 2015)
+YEARS = (2018, 2018)
 
 #%% Load Models
 models = load_models(YEARS, LdaMulticore, by_sector=True)

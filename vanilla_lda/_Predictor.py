@@ -41,7 +41,7 @@ print("# train rows: {}".format(len(data_train)))
 print("# test rows: {}".format(len(data_test)))
 
 # Re-create our risk dictionary using ENTIRE data for that range
-# Could be different for vanilla-lda
+# Could be different for vanilla_lda
 if is_vanilla:
 	risk_docs = []
 	mda_docs = []
