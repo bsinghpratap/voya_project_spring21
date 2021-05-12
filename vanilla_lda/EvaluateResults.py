@@ -42,7 +42,8 @@ df['f1'] = df.apply(lambda row : f1_score(row['y_true'], row['y_pred']), axis=1)
 df['ck'] = df.apply(lambda row : cohen_kappa_score(row['y_true'], row['y_pred']), axis=1)
 
 #%%
-compiled = pd.read_csv('../results/compiled-v1.csv')
+# compiled = pd.read_csv('../results/compiled-v1.csv')
+compiled = df
 category = {
     2012: 'append_all',
     2013: 'append_all',

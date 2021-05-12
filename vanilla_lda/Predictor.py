@@ -39,13 +39,19 @@ SMOTE_PARAMS = {
     'random_state': [22]
 }
 
+# Concatenate items 1a and 7 as one feature vector
 CONCAT_ITEMS = True
+# Sample small fraction of data for testing purposes
 TEST_RUN = False
-LOAD_FROM_FILE = False
-GLOBAL_WEIGHTS = True
-GLOBAL_ESTIMATORS = True
+# Use sparse vector of dimensions for all sectors as feature vector
+GLOBAL_WEIGHTS = False
+# Use a single random forest classifier across all sectors
+GLOBAL_ESTIMATORS = False
+# Include the ALL sector
 INCLUDE_ALL = False
+# Append weights from the ALL sector model to sector specific ones
 APPEND_ALL = False
+# Plot ROC curve
 PLOT_ROC = False
 
 OVERSAMPLE = False
@@ -56,10 +62,10 @@ if INCLUDE_ALL and 'all' not in SECTORS:
 
 #%% Get command line arguments
 args = {
-    'start': 2017,
+    'start': 2014,
     'end': 2017,
-    'validate': 2017,
-    'predict': 2017
+    'validate': 2018,
+    'predict': 2019
 }
 # get_args(arg_map=args)
 YEARS = list(range(int(args['start']), int(args['end']) + 1))
@@ -117,9 +123,9 @@ def get_weights(models, sector, item, document_list, years=YEARS, global_weights
         output_shape = (len(document_list), model.num_topics)
 
     weights = np.zeros(shape=output_shape)
-    loaded_topics = load_weights_file(sector, item, years, model.num_topics)
+    loaded_topics = load_weights_file(sector, item, years, model.num_topics, YEARS)
     if INCLUDE_ALL or APPEND_ALL:
-        loaded_topics_all = load_weights_file(sector, item, years, model.num_topics, all=True)
+        loaded_topics_all = load_weights_file(sector, item, years, model.num_topics, YEARS, all=True)
     if loaded_topics is None or ((INCLUDE_ALL or APPEND_ALL) and loaded_topics_all is None):
         corpus_list = [process(doc, single_doc=True, verbose=False) for doc in
                        document_list['item1a_risk' if item == 'item1a' else 'item7_mda']]
@@ -149,15 +155,15 @@ def get_weights(models, sector, item, document_list, years=YEARS, global_weights
                 weights[idx][topic[0]+model.num_topics] = topic[1]
 
     if len(write_topics) > 0:
-        save_weights_file(sector, item, years, model.num_topics, write_topics)
+        save_weights_file(sector, item, years, model.num_topics, write_topics, YEARS)
     if len(write_topics_all) > 0:
-        save_weights_file(sector, item, years, model.num_topics, write_topics_all, all=True)
+        save_weights_file(sector, item, years, model.num_topics, write_topics_all, YEARS, all=True)
 
     return weights
 
 
 #%%
-def get_preds(sector, item, params, years=YEARS, test_year=args['validate'], test_data=data_validate, aggregator=None, plot_roc=PLOT_ROC):
+def get_preds(sector, item, params, train_years=YEARS, test_year=args['validate'], test_data=data_validate, aggregator=None, plot_roc=PLOT_ROC):
     """:returns (predictions, true_values)"""
 
     # Define models
@@ -174,16 +180,16 @@ def get_preds(sector, item, params, years=YEARS, test_year=args['validate'], tes
     # Get weights for training
     # X_train_docs = data_train[(data_train.year_x in years) & (data_train.sector == sector)]
     if sector != 'all':
-        X_train_docs = data_train.query('year_x in @years & sector == @sector')
+        X_train_docs = data_train.query('year_x in @train_years & sector == @sector')
     else:
-        X_train_docs = data_train.query('year_x in @years')
+        X_train_docs = data_train.query('year_x in @train_years')
     # X_train_corpus = [process(doc, single_doc=True, dictionary=dictionary, verbose=False) for doc in X_train_docs['item1a_risk']]
     if type(item) is list:
         X_train_weights = np.concatenate((
-            get_weights(models, sector, item[0], X_train_docs, years=years, dictionary=dictionary[item[0]]),
-            get_weights(models, sector, item[1], X_train_docs, years=years, dictionary=dictionary[item[1]])), axis=1)
+            get_weights(models, sector, item[0], X_train_docs, years=train_years, dictionary=dictionary[item[0]]),
+            get_weights(models, sector, item[1], X_train_docs, years=train_years, dictionary=dictionary[item[1]])), axis=1)
     else:
-        X_train_weights = get_weights(models, sector, item, X_train_docs, years=years, dictionary=dictionary)
+        X_train_weights = get_weights(models, sector, item, X_train_docs, years=train_years, dictionary=dictionary)
     # X_train_target = X_train_docs['is_dps_cut']
 
     over_sampler = SMOTE(**params['smote'])
@@ -250,10 +256,10 @@ def get_preds(sector, item, params, years=YEARS, test_year=args['validate'], tes
 
 
 #%% Train Models
-def evaluate(params, sector=None, global_estimator=False, test_year=args['validate'], test_data=data_valid):
+def evaluate(params, sector=None, global_estimator=False, train_years=YEARS, test_year=args['validate'], test_data=data_valid):
 
     if global_estimator:
-        aggregate_file = os.getenv('VOYA_PATH_MODELS')+f"{YEARS[0]}-{YEARS[-1]}/weights/{args['start']}-{test_year}_aggregate.pkl"
+        aggregate_file = os.getenv('VOYA_PATH_MODELS')+f"{train_years[0]}-{train_years[-1]}/weights/{args['start']}-{test_year}_aggregate.pkl"
         if os.path.isfile(aggregate_file):
             with open(aggregate_file, mode='rb') as file:
                 aggregators = pickle.load(file)
@@ -267,7 +273,7 @@ def evaluate(params, sector=None, global_estimator=False, test_year=args['valida
             for sector in SECTORS:
                 local_aggregators = dict()
                 for item in ITEMS:
-                    local_aggregators[item] = get_preds(sector, item, params, aggregator=True, test_year=test_year, test_data=test_data)
+                    local_aggregators[item] = get_preds(sector, item, params, aggregator=True, train_years=train_years, test_year=test_year, test_data=test_data)
                 aggregators['X_train_weights'] += np.concatenate((local_aggregators['item1a']['X_train_weights'], local_aggregators['item7']['X_train_weights']), axis=1).tolist()
                 aggregators['X_train_target'] += local_aggregators['item1a']['X_train_target'].to_list()
                 aggregators['X_test_weights'] += np.concatenate((local_aggregators['item1a']['X_test_weights'], local_aggregators['item7']['X_test_weights']), axis=1).tolist()
@@ -288,7 +294,7 @@ def evaluate(params, sector=None, global_estimator=False, test_year=args['valida
     else:
         # TODO: Loop does nothing
         for item in ITEMS if not CONCAT_ITEMS else [ITEMS]:
-            return get_preds(sector, item, params, test_year=test_year, test_data=test_data)
+            return get_preds(sector, item, params, train_years=train_years, test_year=test_year, test_data=test_data)
 
 
 def evaluate_sector(sector=None, global_estimator=False):
@@ -315,7 +321,7 @@ def evaluate_sector(sector=None, global_estimator=False):
 
 def save_final_results(params, sector, plot_roc=PLOT_ROC):
     # y_true, y_pred = get_preds(sector, item, params, test_year=args['predict'], test_data=data_test, plot_roc=PLOT_ROC)
-    y_true, y_pred, estimator = evaluate(params, sector=sector, test_year=args['predict'], test_data=data_test, global_estimator=GLOBAL_ESTIMATORS)
+    y_true, y_pred, estimator = evaluate(params, sector=sector, train_years=[*YEARS, YEARS[-1]+1], test_year=args['predict'], test_data=data_test, global_estimator=GLOBAL_ESTIMATORS)
     if sector is None:
         sector = 'global'
 
@@ -379,12 +385,12 @@ if __name__ == "__main__":
 #     for item in ITEMS:
 #         print(sector, item, "F1:", f1_score(true[sector][item], preds[sector][item]))
 # %% Generate weights
-if __name__ == '__main__':
-    for sector in SECTORS:
-        for item in ITEMS:
-            dictionary = dictionaries[sector][item]
-            if sector != 'all':
-                X_train_docs = data_train.query('year_x in @YEARS & sector == @sector')
-            else:
-                X_train_docs = data_train.query('year_x in @YEARS')
-            get_weights(models, sector, item, X_train_docs, years=YEARS, dictionary=dictionary)
+# if __name__ == '__main__':
+#     for sector in SECTORS:
+#         for item in ITEMS:
+#             dictionary = dictionaries[sector][item]
+#             if sector != 'all':
+#                 X_train_docs = data_train.query('year_x in @YEARS & sector == @sector')
+#             else:
+#                 X_train_docs = data_train.query('year_x in @YEARS')
+#             get_weights(models, sector, item, X_train_docs, years=YEARS, dictionary=dictionary)

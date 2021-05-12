@@ -178,9 +178,9 @@ def plot_coherence(coherence_scores, title="Coherence Scores"):
 
 
 #%% Load Weights from file # TODO: Change YEARS
-def load_weights_file(sector, item, years, num_topics, all=False, YEARS=None):
+def load_weights_file(sector, item, target_years, num_topics, YEARS, all=False):
     target_path = f"{os.getenv('VOYA_PATH_MODELS')}{YEARS[0]}-{YEARS[-1]}/weights/"
-    target_name = f'{years[0]}-{years[-1]}_{sector}_{item}_{num_topics}'
+    target_name = f'{target_years[0]}-{target_years[-1]}_{sector}_{item}_{num_topics}'
     if all: target_name += '_all'
     target_name += '.pkl'
 
@@ -195,10 +195,10 @@ def load_weights_file(sector, item, years, num_topics, all=False, YEARS=None):
     return weights
 
 
-def save_weights_file(sector, item, years, num_topics, weights, all=False):
+def save_weights_file(sector, item, target_years, num_topics, weights, YEARS, all=False):
     # print("Saving weights to file", sector, item, years, num_topics, 'all' if all else 'sector')
     target_path = f"{os.getenv('VOYA_PATH_MODELS')}{YEARS[0]}-{YEARS[-1]}/weights/"
-    target_name = f'{years[0]}-{years[-1]}_{sector}_{item}_{num_topics}'
+    target_name = f'{target_years[0]}-{target_years[-1]}_{sector}_{item}_{num_topics}'
     if all: target_name += '_all'
     target_name += '.pkl'
 
